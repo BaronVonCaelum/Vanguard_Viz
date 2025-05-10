@@ -215,6 +215,140 @@ async def test_api_connection() -> Dict[str, Any]:
         }
 
 
+async def get_weapon_usage_stats(membership_type: int, destiny_membership_id: str, character_id: str) -> Dict[str, Any]:
+    """
+    Get detailed weapon usage statistics for a specific character, including metadata from the manifest.
+    
+    Args:
+        membership_type: The player's membership type (e.g., BungieMembershipType.STEAM)
+        destiny_membership_id: The player's Destiny membership ID
+        character_id: The character ID for which to retrieve weapon stats
+        
+    Returns:
+        Dict containing detailed weapon usage statistics with metadata
+    """
+    try:
+        # Step 1: Get unique weapons data for the character
+        unique_weapons_url = f"https://www.bungie.net/Platform/Destiny2/{membership_type}/Account/{destiny_membership_id}/Character/{character_id}/Stats/UniqueWeapons/"
+        headers = {
+            "X-API-Key": BUNGIE_API_KEY
+        }
+        
+        # Create session for unique weapons request
+        unique_weapons_data = {}
+        async with aiohttp.ClientSession() as session:
+            async with session.get(unique_weapons_url, headers=headers) as response:
+                unique_weapons_response = await response.json()
+                if response.status == 200 and "Response" in unique_weapons_response:
+                    unique_weapons_data = unique_weapons_response.get("Response", {})
+        
+        # Step 2: Get historical stats for the account to supplement weapon data
+        historical_stats_url = f"https://www.bungie.net/Platform/Destiny2/{membership_type}/Account/{destiny_membership_id}/Stats/"
+        historical_stats_data = {}
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.get(historical_stats_url, headers=headers) as response:
+                historical_stats_response = await response.json()
+                if response.status == 200 and "Response" in historical_stats_response:
+                    historical_stats_data = historical_stats_response.get("Response", {})
+        
+        # Step 3: Get weapon definitions from the manifest
+        # First, get the manifest path
+        manifest_url = "https://www.bungie.net/Platform/Destiny2/Manifest/"
+        manifest_data = {}
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.get(manifest_url, headers=headers) as response:
+                manifest_response = await response.json()
+                if response.status == 200 and "Response" in manifest_response:
+                    manifest_data = manifest_response.get("Response", {})
+        
+        # Extract the path to the inventory item definitions
+        item_definitions = {}
+        if manifest_data and "jsonWorldComponentContentPaths" in manifest_data:
+            content_paths = manifest_data["jsonWorldComponentContentPaths"]["en"]
+            if "DestinyInventoryItemDefinition" in content_paths:
+                item_def_path = content_paths["DestinyInventoryItemDefinition"]
+                
+                # Get the item definitions
+                item_def_url = f"https://www.bungie.net{item_def_path}"
+                
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(item_def_url, headers=headers) as response:
+                        if response.status == 200:
+                            try:
+                                item_definitions = await response.json()
+                            except Exception as e:
+                                logger.warning(f"Failed to parse item definitions: {e}")
+                                # Definitions can be large, so we'll proceed without them if there's an issue
+        
+        # Step 4: Process the data and merge weapon stats with metadata
+        weapon_stats = []
+        
+        # Process unique weapons data
+        if "weapons" in unique_weapons_data:
+            for weapon in unique_weapons_data["weapons"]:
+                weapon_hash = str(weapon.get("referenceId", "0"))
+                weapon_data = {
+                    "referenceId": weapon_hash,
+                    "weaponName": "Unknown Weapon",
+                    "weaponType": "Unknown",
+                    "weaponIcon": "",
+                    "killCount": 0,
+                    "precisionKillCount": 0,
+                    "usageTime": 0,
+                    "activityType": "All",
+                }
+                
+                # Add basic stats from unique weapons
+                values = weapon.get("values", {})
+                weapon_data["killCount"] = values.get("uniqueWeaponKills", {}).get("basic", {}).get("value", 0)
+                weapon_data["precisionKillCount"] = values.get("uniqueWeaponPrecisionKills", {}).get("basic", {}).get("value", 0)
+                weapon_data["usageTime"] = values.get("uniqueWeaponTimeUsed", {}).get("basic", {}).get("value", 0)
+                
+                # Add metadata from manifest if available
+                if weapon_hash in item_definitions:
+                    item_def = item_definitions[weapon_hash]
+                    weapon_data["weaponName"] = item_def.get("displayProperties", {}).get("name", "Unknown Weapon")
+                    weapon_data["weaponType"] = item_def.get("itemTypeDisplayName", "Unknown")
+                    weapon_data["weaponIcon"] = item_def.get("displayProperties", {}).get("icon", "")
+                    weapon_data["tierType"] = item_def.get("inventory", {}).get("tierType", 0)
+                    weapon_data["damageType"] = item_def.get("defaultDamageType", 0)
+                
+                weapon_stats.append(weapon_data)
+        
+        # Add PvE/PvP split if available from historical stats
+        if historical_stats_data:
+            # Process PvE weapon stats
+            if "allPvE" in historical_stats_data and "allTime" in historical_stats_data["allPvE"]:
+                pve_stats = historical_stats_data["allPvE"]["allTime"]
+                if "weaponKillsPrecisionKills" in pve_stats:
+                    pve_weapon_stats = pve_stats["weaponKillsPrecisionKills"].get("statId", {})
+                    # Could add more detailed PvE weapon stats here
+            
+            # Process PvP weapon stats
+            if "allPvP" in historical_stats_data and "allTime" in historical_stats_data["allPvP"]:
+                pvp_stats = historical_stats_data["allPvP"]["allTime"]
+                if "weaponKillsPrecisionKills" in pvp_stats:
+                    pvp_weapon_stats = pvp_stats["weaponKillsPrecisionKills"].get("statId", {})
+                    # Could add more detailed PvP weapon stats here
+        
+        # Return combined data
+        return {
+            "status": "success",
+            "weaponStats": weapon_stats,
+            "totalWeapons": len(weapon_stats)
+        }
+    
+    except BungieException as e:
+        logger.error(f"Bungie API error getting weapon stats: {e}")
+        return {"error": f"Bungie API error: {e}"}
+    
+    except Exception as e:
+        logger.error(f"Unexpected error getting weapon stats: {e}")
+        return {"error": f"Unexpected error: {e}"}
+
+
 # Example usage
 async def main():
     """
@@ -275,6 +409,36 @@ async def main():
                                     print(f"PvE Kills: {kills}")
                         else:
                             print(f"Error fetching stats: {stats.get('error')}")
+
+                    # Now let's get weapon usage for the first character if any characters are found
+                    if "characters" in response_data and "data" in response_data["characters"]:
+                        characters = response_data["characters"]["data"]
+                        if characters:
+                            first_char_id = next(iter(characters))
+                            print(f"\nFetching weapon usage stats for character: {first_char_id}...")
+                            
+                            weapon_stats = await get_weapon_usage_stats(
+                                membership_type, 
+                                membership_id, 
+                                first_char_id
+                            )
+                            
+                            if "error" not in weapon_stats:
+                                print("Successfully retrieved weapon stats!")
+                                print(f"Total weapons: {weapon_stats.get('totalWeapons', 0)}")
+                                
+                                # Print top 5 weapons by kill count
+                                weapons = sorted(
+                                    weapon_stats.get("weaponStats", []), 
+                                    key=lambda w: w.get("killCount", 0), 
+                                    reverse=True
+                                )[:5]
+                                
+                                print("\nTop 5 weapons by kill count:")
+                                for idx, weapon in enumerate(weapons, 1):
+                                    print(f"{idx}. {weapon.get('weaponName', 'Unknown')} - Kills: {weapon.get('killCount', 0)}, Precision: {weapon.get('precisionKillCount', 0)}")
+                            else:
+                                print(f"Error fetching weapon stats: {weapon_stats.get('error')}")
 
 
 # Run the main function if this script is executed directly
