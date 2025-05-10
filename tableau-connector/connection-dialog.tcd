@@ -1,0 +1,40 @@
+<connection-dialog class='vanguard_connector'>
+  <connection-config>
+    <authentication-mode value="custom"/>
+    
+    <authentication-options>
+      <option name="apiKey" label="API Key" required="true"/>
+    </authentication-options>
+    
+    <db-properties>
+      <db-property name="dataDate" label="Data Date" required="false" format="YYYY-MM-DD" value-type="string">
+        <validation-rule expression="^[0-9]{4}-[0-9]{2}-[0-9]{2}$|^$" error-message="Please enter a valid date in YYYY-MM-DD format or leave empty" />
+      </db-property>
+    </db-properties>
+  </connection-config>
+
+  <control-group>
+    <control-section>
+      <control-group>
+        <control name="authenticate-group">
+          <authentication-mode-selector />
+        </control>
+      </control-group>
+      
+      <control-group>
+        <control name="apiKey-control" label="API Key">
+          <text-box name="apiKey" value-key="apiKey" placeholder="Enter your API key" required="true" />
+          <help-text>Enter the API key required to access the Vanguard financial data</help-text>
+        </control>
+      </control-group>
+      
+      <control-group>
+        <control name="dataDate-control" label="Data Date">
+          <date-selector name="dataDate" value-key="dataDate" format="YYYY-MM-DD" required="false" />
+          <help-text>Enter the date for which you want to retrieve data (YYYY-MM-DD) or leave blank</help-text>
+        </control>
+      </control-group>
+    </control-section>
+  </control-group>
+</connection-dialog>
+

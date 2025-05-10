@@ -1,0 +1,192 @@
+(function() {
+    // Create the connector object
+    var myConnector = tableau.makeConnector();
+    
+    // Log initialization for debugging
+    console.log("Initializing Destiny 2 Data Connector...");
+    console.log("Tableau version: " + tableau.versionNumber);
+    console.log("Tableau phase: " + tableau.phase);
+    
+    // Define the schema
+    myConnector.getSchema = function(schemaCallback) {
+        console.log("Building Destiny 2 data schema...");
+        
+        var cols = [{
+            id: "itemName",
+            dataType: tableau.dataTypeEnum.string,
+            alias: "Item Name",
+            description: "Name of the Destiny 2 item or weapon"
+        }, {
+            id: "powerLevel",
+            dataType: tableau.dataTypeEnum.float,
+            alias: "Power Level",
+            description: "Power/Light level of the item"
+        }, {
+            id: "timestamp",
+            dataType: tableau.dataTypeEnum.date,
+            alias: "Date Retrieved",
+            description: "Date when the item data was retrieved"
+        }, {
+            id: "popularity",
+            dataType: tableau.dataTypeEnum.int,
+            alias: "Usage Count",
+            description: "Number of Guardians using this item"
+        }];
+
+        var tableSchema = {
+            id: "destiny2Data",
+            alias: "Destiny 2 Guardian Items",
+            description: "Item data from the Destiny 2 API",
+            columns: cols
+        };
+
+        console.log("Schema created successfully");
+        schemaCallback([tableSchema]);
+    };
+
+    // Download the data
+    myConnector.getData = function(table, doneCallback) {
+        // Get the parameters from the connection data
+        var connectionData = JSON.parse(tableau.connectionData || '{}');
+        var apiKey = tableau.password || ""; // Use password for API key
+        var dataDate = connectionData.dataDate || "";
+        
+        console.log("Guardian, fetching Destiny 2 data for date: " + dataDate);
+        console.log("Using Bungie API Key: " + (apiKey ? "******" : "None provided"));
+        
+        // Construct the API URL
+        var apiUrl = "/api/data";
+        
+        // Make the AJAX request
+        console.log("Sending request to: " + apiUrl);
+        $.ajax({
+            url: apiUrl,
+            data: {
+                apiKey: apiKey,
+                date: dataDate
+            },
+            dataType: 'json',
+            success: function(resp) {
+                console.log("Data received from server, processing...");
+                var tableData = [];
+                
+                // Map the API response to our schema
+                if (Array.isArray(resp)) {
+                    console.log("Processing " + resp.length + " items from the Bungie API");
+                    for (var i = 0; i < resp.length; i++) {
+                        tableData.push({
+                            "itemName": resp[i].symbol,
+                            "powerLevel": resp[i].price,
+                            "timestamp": resp[i].date,
+                            "popularity": resp[i].volume
+                        });
+                    }
+                } else {
+                    console.warn("Unexpected data format received, using fallback data");
+                    // Fallback Destiny-themed data
+                    tableData = [
+                        { "itemName": "Gjallarhorn", "powerLevel": 1350, "timestamp": "2025-05-10", "popularity": 1000000 },
+                        { "itemName": "Thorn", "powerLevel": 1345, "timestamp": "2025-05-10", "popularity": 750000 },
+                        { "itemName": "Ace of Spades", "powerLevel": 1340, "timestamp": "2025-05-10", "popularity": 500000 }
+                    ];
+                }
+                
+                console.log("Adding " + tableData.length + " rows to Tableau table");
+                table.appendRows(tableData);
+                console.log("Data load complete, calling doneCallback()");
+                doneCallback();
+            },
+            error: function(xhr, status, error) {
+                console.error("Guardian down! Error fetching Destiny 2 data: " + error);
+                
+                // Check for Bungie-specific error responses
+                var errorMessage = "Error fetching data: " + error;
+                
+                try {
+                    if (xhr.responseJSON) {
+                        if (xhr.responseJSON.ErrorCode) {
+                            errorMessage = "Bungie API Error " + xhr.responseJSON.ErrorCode + ": " + xhr.responseJSON.Message;
+                        } else if (xhr.responseJSON.error) {
+                            errorMessage = xhr.responseJSON.error + ": " + xhr.responseJSON.message;
+                        }
+                    }
+                } catch (e) {
+                    console.error("Error parsing error response:", e);
+                }
+                
+                console.error(errorMessage);
+                tableau.abortWithError(errorMessage);
+            }
+        });
+    };
+
+    // Init function for when the page loads
+    myConnector.init = function(initCallback) {
+        tableau.authType = tableau.authTypeEnum.basic;
+        
+        console.log("Initializing connector in phase: " + tableau.phase);
+        
+        // Handle initialization based on the phase
+        if (tableau.phase == tableau.phaseEnum.interactivePhase || tableau.phase == tableau.phaseEnum.authPhase) {
+            console.log("In interactive/auth phase, setting up UI handlers");
+            
+            // Add event listeners for the submit button
+            $(document).ready(function() {
+                $("#submitButton").click(function() {
+                    console.log("Connect button clicked");
+                    
+                    // Get the input values
+                    var apiKey = $("#apiKey").val().trim();
+                    var dataDate = $("#dataDate").val().trim();
+                    
+                    // Validate inputs
+                    if (!apiKey || !dataDate) {
+                        console.warn("Missing required inputs");
+                        alert("Guardian, please enter both Bungie API Key and Date");
+                        return;
+                    }
+                    
+                    console.log("Storing connection information");
+                    
+                    // Store the API key as the password for security
+                    tableau.username = "destiny_guardian";
+                    tableau.password = apiKey;
+                    
+                    // Store the date in connectionData
+                    tableau.connectionData = JSON.stringify({
+                        dataDate: dataDate
+                    });
+                    
+                    // Show loading indicator
+                    $("#loadingIndicator").show();
+                    console.log("Submitting connection to Tableau");
+                    
+                    // Submit the connector
+                    tableau.connectionName = "Destiny 2 Guardian Data";
+                    tableau.submit();
+                });
+                
+                console.log("UI handlers initialized");
+            });
+        } else {
+            console.log("In data gathering phase or other non-interactive phase");
+        }
+        
+        console.log("Calling initCallback()");
+        initCallback();
+    };
+
+    // Define the shutdown hook for the connector
+    myConnector.shutdown = function(shutdownCallback) {
+        console.log("Shutting down Destiny 2 connector...");
+        // Clean up any resources
+        shutdownCallback();
+    };
+
+    // Register the connector with Tableau
+    tableau.registerConnector(myConnector);
+    
+    // Log connector registration
+    console.log("Destiny 2 connector registered with Tableau");
+})();
+

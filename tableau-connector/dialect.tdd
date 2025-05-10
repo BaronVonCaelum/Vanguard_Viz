@@ -1,0 +1,82 @@
+<dialect name='Vanguard' class='vanguard_connector'>
+  <dialect-version>1.0</dialect-version>
+
+  <batch-query-support enabled='false' />
+  
+  <supported-operators>
+    <operator name="=" />
+    <operator name="!=" />
+    <operator name="&gt;" />
+    <operator name="&gt;=" />
+    <operator name="&lt;" />
+    <operator name="&lt;=" />
+    <operator name="LIKE" />
+    <operator name="IN" />
+    <operator name="IS NULL" />
+    <operator name="IS NOT NULL" />
+  </supported-operators>
+  
+  <function-map>
+    <!-- Date Functions -->
+    <function group='date' name='DATEPART' return-type='int'>
+      <formula>EXTRACT(%1 FROM %2)</formula>
+      <argument type='localstr' />
+      <argument type='date' />
+    </function>
+    
+    <function group='date' name='DATE' return-type='date'>
+      <formula>CAST(%1 AS DATE)</formula>
+      <argument type='str' />
+    </function>
+  </function-map>
+  
+  <supported-aggregations>
+    <aggregation name='COUNT' />
+    <aggregation name='SUM' />
+    <aggregation name='AVG' />
+    <aggregation name='MIN' />
+    <aggregation name='MAX' />
+  </supported-aggregations>
+  
+  <!-- SQL Patterns -->
+  <sql-format>
+    <date-literal-format formats='yyyy-MM-dd'>
+      <format-string>DATE '%1'</format-string>
+    </date-literal-format>
+    
+    <date-time-literal-format formats='yyyy-MM-dd HH:mm:ss'>
+      <format-string>TIMESTAMP '%1'</format-string>
+    </date-time-literal-format>
+    
+    <numeric-literal-format>
+      <format-string>%1</format-string>
+    </numeric-literal-format>
+    
+    <string-literal-format>
+      <format-string>'%1'</format-string>
+    </string-literal-format>
+  </sql-format>
+  
+  <!-- Data Type Map -->
+  <data-type-map>
+    <type source='str' target='str' />
+    <type source='int' target='int' />
+    <type source='float' target='real' />
+    <type source='date' target='date' />
+    <type source='datetime' target='datetime' />
+  </data-type-map>
+  
+  <capabilities>
+    <capability name='CAP_QUERY_TOP_N' value='false' />
+    <capability name='CAP_QUERY_SUBQUERIES' value='false' />
+    <capability name='CAP_QUERY_JOIN_INNER' value='false' />
+    <capability name='CAP_QUERY_JOIN_OUTER' value='false' />
+    <capability name='CAP_QUERY_SORT_BY' value='true' />
+    <capability name='CAP_QUERY_GROUP_BY' value='true' />
+    <capability name='CAP_QUERY_HAVING' value='false' />
+    <capability name='CAP_QUERY_FILTER_BOOLEANS' value='true' />
+    <capability name='CAP_QUERY_WHERE' value='true' />
+    <capability name='CAP_CREATE_TEMP_TABLES' value='false' />
+  </capabilities>
+</dialect>
+

@@ -1,0 +1,87 @@
+<connection-resolver class='vanguard_connector'>
+  <connection-builder>
+    <script>
+      function apiRequest(params) {
+        // Create base URL for API request
+        var baseUrl = 'https://api.vanguard.com/data';
+        
+        // Add query parameters
+        var urlParams = {};
+        
+        // Add API Key to headers for authentication
+        var apiKey = params["authentication"]["apiKey"];
+        if (!apiKey || apiKey.length === 0) {
+          throw "API Key is required";
+        }
+        
+        // Add data date to query parameters if provided
+        var dataDate = params["properties"]["dataDate"];
+        if (dataDate && dataDate.length > 0) {
+          urlParams["date"] = dataDate;
+        }
+        
+        // No date parameter will be added if dataDate is empty
+        
+        // Format URL with parameters
+        var formattedUrl = baseUrl + '?' + Object.keys(urlParams).map(function(key) {
+          return key + '=' + encodeURIComponent(urlParams[key]);
+        }).join('&amp;');
+        
+        // Return connection information
+        return {
+          "url": formattedUrl,
+          "headers": {
+            "Authorization": "Bearer " + apiKey,
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+          }
+        };
+      }
+      
+      function connectionBuilder(params) {
+        try {
+          return apiRequest(params);
+        } catch (error) {
+          throw "Connection error: " + error;
+        }
+      }
+      
+      return connectionBuilder(params);
+    </script>
+  </connection-builder>
+  
+  <connection-normalizer>
+    <script>
+      function normalizeConnection(connection) {
+        // Apply any connection string normalization if needed
+        // For example, ensure URL format is consistent
+        
+        var normalized = connection;
+        
+        // Make sure we have a valid URL
+        if (!normalized["url"]) {
+          normalized["url"] = "https://api.vanguard.com/data";
+        }
+        
+        return normalized;
+      }
+      
+      return normalizeConnection(connection);
+    </script>
+  </connection-normalizer>
+  
+  <connection-properties>
+    <script>
+      function getConnectionProperties(connection) {
+        return {
+          "vendor": "vanguard",
+          "driver": "vanguard_api",
+          "authentication": "custom"
+        };
+      }
+      
+      return getConnectionProperties(connection);
+    </script>
+  </connection-properties>
+</connection-resolver>
+

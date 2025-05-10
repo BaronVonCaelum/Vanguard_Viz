@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<connection-fields>
+
+  <!-- Custom fields for authentication -->
+  <field name="apiKey" label="API Key" category="authentication" value-type="string">
+    <description>API key for accessing Vanguard financial data</description>
+    <validation-rule expression=".+" error-message="API Key is required" />
+  </field>
+
+  <!-- Custom fields for other properties -->
+  <field name="dataDate" label="Data Date" category="properties" value-type="string">
+    <description>Date for which to retrieve financial data (YYYY-MM-DD format, optional)</description>
+    <validation-rule expression="^[0-9]{4}-[0-9]{2}-[0-9]{2}$|^$" error-message="Please enter a valid date in YYYY-MM-DD format or leave empty" />
+  </field>
+
+  <!-- Table field definitions -->
+  <field-group table="vanguardData" label="Vanguard Financial Data">
+    <field name="symbol" label="Symbol" category="column" value-type="string">
+      <description>Stock ticker symbol</description>
+      <attribute-group>
+        <attribute name="data-type">string</attribute>
+        <attribute name="is-primary-key">true</attribute>
+      </attribute-group>
+    </field>
+    
+    <field name="price" label="Price" category="column" value-type="real">
+      <description>Current stock price</description>
+      <attribute-group>
+        <attribute name="data-type">float</attribute>
+        <attribute name="is-primary-key">false</attribute>
+        <attribute name="decimal-precision">2</attribute>
+      </attribute-group>
+    </field>
+    
+    <field name="date" label="Date" category="column" value-type="date">
+      <description>Date of the price data</description>
+      <attribute-group>
+        <attribute name="data-type">date</attribute>
+        <attribute name="is-primary-key">false</attribute>
+        <attribute name="date-format">yyyy-MM-dd</attribute>
+      </attribute-group>
+    </field>
+    
+    <field name="volume" label="Volume" category="column" value-type="integer">
+      <description>Trading volume</description>
+      <attribute-group>
+        <attribute name="data-type">int</attribute>
+        <attribute name="is-primary-key">false</attribute>
+      </attribute-group>
+    </field>
+  </field-group>
+
+</connection-fields>
+

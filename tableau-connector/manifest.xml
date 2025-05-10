@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<connector-plugin class="vanguard_connector" superclass="jdbc" plugin-version="1.0" name="Vanguard Data Connector" version="18.1">
+  <vendor-information>
+    <company name="Vanguard"/>
+    <support-link url="https://www.vanguard.com/support"/>
+    <driver-download-link url="https://www.vanguard.com/drivers"/>
+  </vendor-information>
+  
+  <connection-customization class="vanguard_connector" enabled="true" version="10.0">
+    <vendor name="vanguard"/>
+    <driver name="vanguard"/>
+    <customizations>
+      <customization name="CAP_CREATE_TEMP_TABLES" value="no"/>
+      <customization name="CAP_SUPPRESS_DISCOVERY_QUERIES" value="yes"/>
+    </customizations>
+  </connection-customization>
+  
+  <connection-dialog file="connection-dialog.tcd">
+    <connection-config>
+      <authentication-mode value="custom"/>
+      
+      <authentication-options>
+        <option name="apiKey" default="" label="API Key"/>
+      </authentication-options>
+      
+      <db-properties>
+        <db-property name="dataDate" label="Data Date" value-type="string" default=""/>
+      </db-properties>
+    </connection-config>
+  </connection-dialog>
+  
+  <connection-resolver file="connectionResolver.tdr"/>
+  <dialect file="dialect.tdd"/>
+  
+  <connection-fields file="connection-fields.xml"/>
+  
+  <table-metadata-generator file="table-metadata.tflx">
+    <column-mapping>
+      <column name="symbol" type="string" alias="Symbol"/>
+      <column name="price" type="float" alias="Price"/>
+      <column name="date" type="date" alias="Date"/>
+      <column name="volume" type="int" alias="Volume"/>
+    </column-mapping>
+  </table-metadata-generator>
+</connector-plugin>
+

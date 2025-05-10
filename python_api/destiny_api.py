@@ -6,7 +6,8 @@ import os
 import asyncio
 import logging
 import aiohttp
-from typing import Dict, Any, Optional, List, Union
+from typing import Dict, Any, Optional, List, Union, Tuple
+from datetime import datetime, timedelta
 
 # For environment variables
 from dotenv import load_dotenv
@@ -17,7 +18,8 @@ from bungio.models import (
     DestinyComponentType,
     BungieMembershipType,
     GroupsForMemberFilter,
-    DestinyStatsGroupType
+    DestinyStatsGroupType,
+    PeriodType
 )
 from bungio.error import BungieException
 
@@ -127,13 +129,20 @@ async def get_user_profile(bungie_name: str, bungie_code: str) -> Dict[str, Any]
         return {"error": f"Unexpected error: {e}"}
 
 
-async def get_player_stats(membership_type: int, destiny_membership_id: str) -> Dict[str, Any]:
+async def get_player_stats(
+    membership_type: int, 
+    destiny_membership_id: str,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None
+) -> Dict[str, Any]:
     """
     Get a player's Destiny 2 stats.
     
     Args:
         membership_type: The player's membership type (e.g., BungieMembershipType.STEAM)
         destiny_membership_id: The player's Destiny membership ID
+        start_date: Optional start date for filtering stats
+        end_date: Optional end date for filtering stats
         
     Returns:
         Dict containing player stats
@@ -148,7 +157,15 @@ async def get_player_stats(membership_type: int, destiny_membership_id: str) -> 
         
         # Build the URL for stats request
         groups_str = ",".join(str(g) for g in groups)
-        url = f"https://www.bungie.net/Platform/Destiny2/{membership_type}/Account/{destiny_membership_id}/Stats/?groups={groups_str}"
+        
+        # Add date parameters if specified
+        date_params = ""
+        if start_date:
+            date_params += f"&daystart={start_date.strftime('%Y-%m-%d')}"
+        if end_date:
+            date_params += f"&dayend={end_date.strftime('%Y-%m-%d')}"
+            
+        url = f"https://www.bungie.net/Platform/Destiny2/{membership_type}/Account/{destiny_membership_id}/Stats/?groups={groups_str}{date_params}"
         headers = {
             "X-API-Key": BUNGIE_API_KEY
         }
@@ -215,7 +232,13 @@ async def test_api_connection() -> Dict[str, Any]:
         }
 
 
-async def get_weapon_usage_stats(membership_type: int, destiny_membership_id: str, character_id: str) -> Dict[str, Any]:
+async def get_weapon_usage_stats(
+    membership_type: int, 
+    destiny_membership_id: str, 
+    character_id: str,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None
+) -> Dict[str, Any]:
     """
     Get detailed weapon usage statistics for a specific character, including metadata from the manifest.
     
@@ -223,6 +246,8 @@ async def get_weapon_usage_stats(membership_type: int, destiny_membership_id: st
         membership_type: The player's membership type (e.g., BungieMembershipType.STEAM)
         destiny_membership_id: The player's Destiny membership ID
         character_id: The character ID for which to retrieve weapon stats
+        start_date: Optional start date for filtering stats
+        end_date: Optional end date for filtering stats
         
     Returns:
         Dict containing detailed weapon usage statistics with metadata
@@ -349,8 +374,262 @@ async def get_weapon_usage_stats(membership_type: int, destiny_membership_id: st
         return {"error": f"Unexpected error: {e}"}
 
 
-# Example usage
-async def main():
+async def get_activity_history(
+    membership_type: int,
+    destiny_membership_id: str,
+    character_id: str,
+    mode: Optional[int] = None,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    page: int = 0,
+    count: int = 25
+) -> Dict[str, Any]:
+    """
+    Get a player's activity history with optional date filtering.
+    
+    Args:
+        membership_type: The player's membership type (e.g., BungieMembershipType.STEAM)
+        destiny_membership_id: The player's Destiny membership ID
+        character_id: The character ID for which to retrieve activity history
+        mode: Optional activity mode filter (None returns all activities)
+        start_date: Optional start date for filtering activities
+        end_date: Optional end date for filtering activities
+        page: Page number for pagination
+        count: Number of activities to return per page
+        
+    Returns:
+        Dict containing activity history data
+    """
+    try:
+        # Build the URL for activity history request
+        url = f"https://www.bungie.net/Platform/Destiny2/{membership_type}/Account/{destiny_membership_id}/Character/{character_id}/Stats/Activities/"
+        
+        # Add query parameters
+        params = []
+        if mode is not None:
+            params.append(f"mode={mode}")
+        if page is not None:
+            params.append(f"page={page}")
+        if count is not None:
+            params.append(f"count={count}")
+            
+        # Add params to URL if any exist
+        if params:
+            url += "?" + "&".join(params)
+            
+        headers = {
+            "X-API-Key": BUNGIE_API_KEY
+        }
+        
+        # Create a new session for the request
+        activities_data = {}
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=headers) as response:
+                activities_response = await response.json()
+                if response.status == 200 and "Response" in activities_response:
+                    activities_data = activities_response.get("Response", {})
+        
+        # Filter by date if specified
+        if start_date or end_date:
+            filtered_activities = []
+            
+            if "activities" in activities_data:
+                for activity in activities_data.get("activities", []):
+                    # Get the activity date
+                    period = activity.get("period", "")
+                    if period:
+                        # Parse the date from the period string
+                        activity_date = datetime.strptime(period, "%Y-%m-%dT%H:%M:%SZ")
+                        
+                        # Check if within date range
+                        if start_date and activity_date < start_date:
+                            continue
+                        if end_date and activity_date > end_date:
+                            continue
+                            
+                        # If we reach here, the activity is within the date range
+                        filtered_activities.append(activity)
+                
+                # Replace the activities with the filtered list
+                activities_data["activities"] = filtered_activities
+        
+        # Transform the data for Tableau
+        tableau_data = transform_activities_for_tableau(activities_data)
+        
+        return {
+            "status": "success",
+            "activities": activities_data,
+            "tableauData": tableau_data,
+            "totalActivities": len(activities_data.get("activities", []))
+        }
+    
+    except BungieException as e:
+        logger.error(f"Bungie API error getting activity history: {e}")
+        return {"error": f"Bungie API error: {e}"}
+    
+    except Exception as e:
+        logger.error(f"Unexpected error getting activity history: {e}")
+        return {"error": f"Unexpected error: {e}"}
+
+
+async def get_aggregate_activity_stats(
+    membership_type: int,
+    destiny_membership_id: str,
+    character_id: str
+) -> Dict[str, Any]:
+    """
+    Get aggregate activity statistics for a character.
+    
+    Args:
+        membership_type: The player's membership type (e.g., BungieMembershipType.STEAM)
+        destiny_membership_id: The player's Destiny membership ID
+        character_id: The character ID for which to retrieve activity stats
+        
+    Returns:
+        Dict containing aggregate activity statistics
+    """
+    try:
+        # Build the URL for aggregate stats request
+        url = f"https://www.bungie.net/Platform/Destiny2/{membership_type}/Account/{destiny_membership_id}/Character/{character_id}/Stats/AggregateActivityStats/"
+        headers = {
+            "X-API-Key": BUNGIE_API_KEY
+        }
+        
+        # Create a new session for the request
+        aggregate_data = {}
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=headers) as response:
+                aggregate_response = await response.json()
+                if response.status == 200 and "Response" in aggregate_response:
+                    aggregate_data = aggregate_response.get("Response", {})
+        
+        # Transform the data for Tableau
+        tableau_data = transform_aggregate_stats_for_tableau(aggregate_data)
+        
+        return {
+            "status": "success",
+            "aggregateStats": aggregate_data,
+            "tableauData": tableau_data
+        }
+    
+    except BungieException as e:
+        logger.error(f"Bungie API error getting aggregate stats: {e}")
+        return {"error": f"Bungie API error: {e}"}
+    
+    except Exception as e:
+        logger.error(f"Unexpected error getting aggregate stats: {e}")
+        return {"error": f"Unexpected error: {e}"}
+
+
+async def get_historical_stats_with_period(
+    membership_type: int,
+    destiny_membership_id: str,
+    character_id: str,
+    period_type: PeriodType = PeriodType.ALLTIME,
+    modes: Optional[List[int]] = None,
+    groups: Optional[List[int]] = None,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None
+) -> Dict[str, Any]:
+    """
+    Get historical stats for a character with period filtering.
+    
+    Args:
+        membership_type: The player's membership type (e.g., BungieMembershipType.STEAM)
+        destiny_membership_id: The player's Destiny membership ID
+        character_id: The character ID for which to retrieve stats (0 for account-wide)
+        period_type: The period type to retrieve (Daily, AllTime, Activity)
+        modes: Optional list of activity modes to include
+        groups: Optional list of stat groups to include
+        start_date: Optional start date for filtering daily stats
+        end_date: Optional end date for filtering daily stats
+        
+    Returns:
+        Dict containing historical stats
+    """
+    try:
+        # Build the URL for historical stats request
+        url = f"https://www.bungie.net/Platform/Destiny2/{membership_type}/Account/{destiny_membership_id}/Character/{character_id}/Stats/"
+        
+        # Add query parameters
+        params = []
+        
+        # Add period type
+        if period_type:
+            params.append(f"periodType={period_type.value}")
+            
+        # Add modes if specified
+        if modes:
+            modes_str = ",".join(str(m) for m in modes)
+            params.append(f"modes={modes_str}")
+            
+        # Add groups if specified
+        if groups:
+            groups_str = ",".join(str(g) for g in groups)
+            params.append(f"groups={groups_str}")
+            
+        # Add date range if period type is daily
+        if period_type == PeriodType.DAILY:
+            if start_date:
+                params.append(f"daystart={start_date.strftime('%Y-%m-%d')}")
+            if end_date:
+                params.append(f"dayend={end_date.strftime('%Y-%m-%d')}")
+        
+        # Add params to URL if any exist
+        if params:
+            url += "?" + "&".join(params)
+            
+        headers = {
+            "X-API-Key": BUNGIE_API_KEY
+        }
+        
+        # Create a new session for the request
+        stats_data = {}
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=headers) as response:
+                stats_response = await response.json()
+                if response.status == 200 and "Response" in stats_response:
+                    stats_data = stats_response.get("Response", {})
+        
+        # Transform the data for Tableau
+        tableau_data = transform_historical_stats_for_tableau(stats_data, period_type)
+        
+        return {
+            "status": "success",
+            "historicalStats": stats_data,
+            "tableauData": tableau_data
+        }
+    
+    except BungieException as e:
+        logger.error(f"Bungie API error getting historical stats: {e}")
+        return {"error": f"Bungie API error: {e}"}
+    
+    except Exception as e:
+        logger.error(f"Unexpected error getting historical stats: {e}")
+        return {"error": f"Unexpected error: {e}"}
+
+
+# Data transformation functions for Tableau
+
+def transform_activities_for_tableau(activities_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """
+    Transform activity history data into a format suitable for Tableau.
+    
+    Args:
+        activities_data: Activity history data from the Bungie API
+        
+    Returns:
+        List of dicts with flattened activity data for Tableau
+    """
+    tableau_data = []
+    
+    for activity in activities_data.get("activities", []):
+        # Basic activity info
+        activity_entry = {
+            "instanceId": activity.get("activityDetails", {}).get("instanceId", ""),
+            "activityDate": activity.get("period", ""),
+            "activityHash": activity.get("activityDetails", {}).get("referenceId", 0),
+            "activityName": activity.get("activityDetails", {}).get("displayProperties", {}).get
     """
     Main function to test the API client
     """
