@@ -44,3 +44,7 @@ out/
 *.egg-info/
 *.egg
 
+
+# Destiny Manifest
+destiny_manifest.db
+bungie_api_spec.json
