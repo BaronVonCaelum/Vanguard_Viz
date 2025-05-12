@@ -232,6 +232,80 @@ async def test_api_connection() -> Dict[str, Any]:
         }
 
 
+async def get_manifest_component(component_type: str = "DestinyInventoryItemDefinition") -> Dict[str, Any]:
+    """
+    Retrieves a specific component from the Destiny 2 Manifest.
+    
+    Args:
+        component_type: The manifest component to retrieve. Default is "DestinyInventoryItemDefinition".
+                       Other examples include "DestinyClassDefinition", "DestinySandboxPerkDefinition", etc.
+        
+    Returns:
+        Dict containing the requested manifest component data
+    """
+    try:
+        # Step 1: Get the manifest
+        manifest_url = "https://www.bungie.net/Platform/Destiny2/Manifest/"
+        headers = {
+            "X-API-Key": BUNGIE_API_KEY
+        }
+        
+        # Make request to get the manifest paths
+        async with aiohttp.ClientSession() as session:
+            async with session.get(manifest_url, headers=headers) as response:
+                manifest_response = await response.json()
+                if response.status != 200 or "Response" not in manifest_response:
+                    logger.error(f"Failed to get manifest: {manifest_response.get('Message', 'Unknown error')}")
+                    return {"error": "Failed to retrieve Destiny 2 manifest"}
+                
+                manifest_data = manifest_response.get("Response", {})
+        
+        # Step 2: Extract the path for the requested component
+        if "jsonWorldComponentContentPaths" not in manifest_data or "en" not in manifest_data["jsonWorldComponentContentPaths"]:
+            logger.error("Manifest data does not contain jsonWorldComponentContentPaths or language data")
+            return {"error": "Invalid manifest data structure"}
+            
+        content_paths = manifest_data["jsonWorldComponentContentPaths"]["en"]
+        if component_type not in content_paths:
+            logger.error(f"Component type {component_type} not found in manifest")
+            return {"error": f"Component type {component_type} not found in manifest"}
+            
+        component_path = content_paths[component_type]
+        
+        # Step 3: Construct the full URL
+        component_url = f"https://www.bungie.net{component_path}"
+        
+        # Step 4: Make second call to get the actual definitions
+        logger.info(f"Fetching manifest component: {component_type}")
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(component_url) as response:
+                    if response.status != 200:
+                        logger.error(f"Failed to get component data: {response.status}")
+                        return {"error": f"Failed to retrieve component data: {response.status}"}
+                    
+                    # Parse the response - can be large so we handle with care
+                    component_data = await response.json()
+                    
+                    logger.info(f"Successfully retrieved {component_type} with {len(component_data)} entries")
+                    return {
+                        "status": "success",
+                        "componentType": component_type,
+                        "componentData": component_data
+                    }
+        except Exception as e:
+            logger.error(f"Error fetching component data: {e}")
+            return {"error": f"Failed to retrieve or parse component data: {e}"}
+    
+    except BungieException as e:
+        logger.error(f"Bungie API error: {e}")
+        return {"error": f"Bungie API error: {e}"}
+    
+    except Exception as e:
+        logger.error(f"Unexpected error retrieving manifest component: {e}")
+        return {"error": f"Unexpected error: {e}"}
+
+
 async def get_weapon_usage_stats(
     membership_type: int, 
     destiny_membership_id: str, 
@@ -278,34 +352,16 @@ async def get_weapon_usage_stats(
                     historical_stats_data = historical_stats_response.get("Response", {})
         
         # Step 3: Get weapon definitions from the manifest
-        # First, get the manifest path
-        manifest_url = "https://www.bungie.net/Platform/Destiny2/Manifest/"
-        manifest_data = {}
+        # Get item definitions using our new method
+        item_definitions_response = await get_manifest_component("DestinyInventoryItemDefinition")
         
-        async with aiohttp.ClientSession() as session:
-            async with session.get(manifest_url, headers=headers) as response:
-                manifest_response = await response.json()
-                if response.status == 200 and "Response" in manifest_response:
-                    manifest_data = manifest_response.get("Response", {})
-        
-        # Extract the path to the inventory item definitions
+        # Extract the item definitions if successful
         item_definitions = {}
-        if manifest_data and "jsonWorldComponentContentPaths" in manifest_data:
-            content_paths = manifest_data["jsonWorldComponentContentPaths"]["en"]
-            if "DestinyInventoryItemDefinition" in content_paths:
-                item_def_path = content_paths["DestinyInventoryItemDefinition"]
-                
-                # Get the item definitions
-                item_def_url = f"https://www.bungie.net{item_def_path}"
-                
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(item_def_url, headers=headers) as response:
-                        if response.status == 200:
-                            try:
-                                item_definitions = await response.json()
-                            except Exception as e:
-                                logger.warning(f"Failed to parse item definitions: {e}")
-                                # Definitions can be large, so we'll proceed without them if there's an issue
+        if "status" in item_definitions_response and item_definitions_response["status"] == "success":
+            item_definitions = item_definitions_response.get("componentData", {})
+        else:
+            logger.warning(f"Failed to retrieve item definitions: {item_definitions_response.get('error', 'Unknown error')}")
+            # We'll proceed without item definitions if there's an issue
         
         # Step 4: Process the data and merge weapon stats with metadata
         weapon_stats = []
@@ -629,7 +685,100 @@ def transform_activities_for_tableau(activities_data: Dict[str, Any]) -> List[Di
             "instanceId": activity.get("activityDetails", {}).get("instanceId", ""),
             "activityDate": activity.get("period", ""),
             "activityHash": activity.get("activityDetails", {}).get("referenceId", 0),
-            "activityName": activity.get("activityDetails", {}).get("displayProperties", {}).get
+            "activityName": activity.get("activityDetails", {}).get("displayProperties", {}).get("name", "Unknown Activity"),
+            "activityMode": activity.get("activityDetails", {}).get("mode", 0),
+            "activityModeType": activity.get("activityDetails", {}).get("modeType", 0),
+            "isPrivate": activity.get("activityDetails", {}).get("isPrivate", False),
+            "completed": activity.get("values", {}).get("completed", {}).get("basic", {}).get("value", 0),
+            "timePlayedSeconds": activity.get("values", {}).get("timePlayedSeconds", {}).get("basic", {}).get("value", 0),
+            "kills": activity.get("values", {}).get("kills", {}).get("basic", {}).get("value", 0),
+            "deaths": activity.get("values", {}).get("deaths", {}).get("basic", {}).get("value", 0),
+            "assists": activity.get("values", {}).get("assists", {}).get("basic", {}).get("value", 0),
+            "score": activity.get("values", {}).get("score", {}).get("basic", {}).get("value", 0),
+            "standing": activity.get("values", {}).get("standing", {}).get("basic", {}).get("value", 0)
+        }
+        tableau_data.append(activity_entry)
+    
+    return tableau_data
+
+
+def transform_aggregate_stats_for_tableau(aggregate_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """
+    Transform aggregate stats data into a format suitable for Tableau.
+    
+    Args:
+        aggregate_data: Aggregate stats data from the Bungie API
+        
+    Returns:
+        List of dicts with flattened stats data for Tableau
+    """
+    tableau_data = []
+    
+    for activity in aggregate_data.get("activities", []):
+        stats_entry = {
+            "activityHash": activity.get("activityHash", 0),
+            "activityName": activity.get("activityName", "Unknown"),
+        }
+        
+        # Add all values from the activity's values dictionary
+        values = activity.get("values", {})
+        for stat_name, stat_data in values.items():
+            if "basic" in stat_data:
+                stats_entry[stat_name] = stat_data["basic"].get("value", 0)
+        
+        tableau_data.append(stats_entry)
+    
+    return tableau_data
+
+
+def transform_historical_stats_for_tableau(stats_data: Dict[str, Any], period_type: PeriodType) -> List[Dict[str, Any]]:
+    """
+    Transform historical stats data into a format suitable for Tableau.
+    
+    Args:
+        stats_data: Historical stats data from the Bungie API
+        period_type: The period type of the stats (daily, all time, etc.)
+        
+    Returns:
+        List of dicts with flattened stats data for Tableau
+    """
+    tableau_data = []
+    
+    # Handle different period types differently
+    if period_type == PeriodType.DAILY:
+        # For daily stats, create an entry for each day
+        for mode_key, mode_data in stats_data.items():
+            for day, day_stats in mode_data.get("daily", {}).items():
+                entry = {
+                    "date": day,
+                    "mode": mode_key
+                }
+                
+                # Add all stat values for this day
+                for stat_name, stat_data in day_stats.get("values", {}).items():
+                    if "basic" in stat_data:
+                        entry[stat_name] = stat_data["basic"].get("value", 0)
+                
+                tableau_data.append(entry)
+    else:
+        # For all time or other period types, create a single entry per mode
+        for mode_key, mode_data in stats_data.items():
+            if "allTime" in mode_data:
+                entry = {
+                    "mode": mode_key
+                }
+                
+                # Add all stat values for this mode
+                for stat_name, stat_data in mode_data["allTime"].items():
+                    if "basic" in stat_data:
+                        entry[stat_name] = stat_data["basic"].get("value", 0)
+                
+                tableau_data.append(entry)
+    
+    return tableau_data
+
+
+async def main():
     """
     Main function to test the API client
     """
@@ -637,6 +786,25 @@ def transform_activities_for_tableau(activities_data: Dict[str, Any]) -> List[Di
     # Test the API connection
     connection_test = await test_api_connection()
     print(f"Connection test result: {connection_test}")
+
+    # Test the manifest component retrieval
+    print("\nTesting manifest component retrieval...")
+    inventory_items = await get_manifest_component("DestinyInventoryItemDefinition")
+    if "status" in inventory_items and inventory_items["status"] == "success":
+        component_data = inventory_items.get("componentData", {})
+        print(f"Successfully retrieved inventory item definitions with {len(component_data)} entries")
+        
+        # Print a sample item to demonstrate the data structure
+        if component_data:
+            sample_hash = next(iter(component_data))
+            sample_item = component_data[sample_hash]
+            print("\nSample Item:")
+            print(f"Hash: {sample_hash}")
+            print(f"Name: {sample_item.get('displayProperties', {}).get('name', 'Unknown')}")
+            print(f"Type: {sample_item.get('itemTypeDisplayName', 'Unknown')}")
+            print(f"Tier: {sample_item.get('inventory', {}).get('tierTypeName', 'Unknown')}")
+    else:
+        print(f"Error retrieving inventory items: {inventory_items.get('error', 'Unknown error')}")
     
     # If connected successfully, try to fetch a user profile
     if connection_test["status"] == "connected":

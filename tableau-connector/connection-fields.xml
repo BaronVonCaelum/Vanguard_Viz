@@ -1,54 +1,170 @@
 <?xml version="1.0" encoding="utf-8"?>
 <connection-fields>
-
-  <!-- Custom fields for authentication -->
+  <!-- Authentication and property fields remain the same -->
   <field name="apiKey" label="API Key" category="authentication" value-type="string">
-    <description>API key for accessing Vanguard financial data</description>
+    <description>Bungie API key for accessing Destiny 2 data</description>
     <validation-rule expression=".+" error-message="API Key is required" />
   </field>
 
-  <!-- Custom fields for other properties -->
-  <field name="dataDate" label="Data Date" category="properties" value-type="string">
-    <description>Date for which to retrieve financial data (YYYY-MM-DD format, optional)</description>
+  <field name="startDate" label="Start Date" category="properties" value-type="string">
+    <description>Start date for data range (YYYY-MM-DD format, optional)</description>
     <validation-rule expression="^[0-9]{4}-[0-9]{2}-[0-9]{2}$|^$" error-message="Please enter a valid date in YYYY-MM-DD format or leave empty" />
   </field>
 
-  <!-- Table field definitions -->
-  <field-group table="vanguardData" label="Vanguard Financial Data">
-    <field name="symbol" label="Symbol" category="column" value-type="string">
-      <description>Stock ticker symbol</description>
+  <field name="endDate" label="End Date" category="properties" value-type="string">
+    <description>End date for data range (YYYY-MM-DD format, optional)</description>
+    <validation-rule expression="^[0-9]{4}-[0-9]{2}-[0-9]{2}$|^$" error-message="Please enter a valid date in YYYY-MM-DD format or leave empty" />
+  </field>
+
+  <field name="type" label="Data Type" category="properties" value-type="string">
+    <description>Type of data to retrieve (items, weapons, or vendors)</description>
+    <validation-rule expression="^(items|weapons|vendors)$|^$" error-message="Invalid data type" />
+  </field>
+
+  <!-- Table field definitions - Updated to match server.js transformation -->
+  <field-group table="destinyData" label="Destiny 2 Data">
+    <field name="hash" label="Hash" category="column" value-type="string">
+      <description>Unique identifier for Destiny 2 items</description>
       <attribute-group>
         <attribute name="data-type">string</attribute>
         <attribute name="is-primary-key">true</attribute>
       </attribute-group>
     </field>
-    
-    <field name="price" label="Price" category="column" value-type="real">
-      <description>Current stock price</description>
+
+    <field name="name" label="Name" category="column" value-type="string">
+      <description>Item name from displayProperties</description>
       <attribute-group>
-        <attribute name="data-type">float</attribute>
-        <attribute name="is-primary-key">false</attribute>
-        <attribute name="decimal-precision">2</attribute>
+        <attribute name="data-type">string</attribute>
       </attribute-group>
     </field>
-    
+
+    <field name="description" label="Description" category="column" value-type="string">
+      <description>Item description from displayProperties</description>
+      <attribute-group>
+        <attribute name="data-type">string</attribute>
+      </attribute-group>
+    </field>
+
+    <field name="icon" label="Icon URL" category="column" value-type="string">
+      <description>URL to item's icon image</description>
+      <attribute-group>
+        <attribute name="data-type">string</attribute>
+      </attribute-group>
+    </field>
+
+    <field name="type" label="Item Type" category="column" value-type="string">
+      <description>Item type display name</description>
+      <attribute-group>
+        <attribute name="data-type">string</attribute>
+      </attribute-group>
+    </field>
+
+    <field name="tierType" label="Tier Type" category="column" value-type="string">
+      <description>Item tier type name (e.g., Exotic, Legendary)</description>
+      <attribute-group>
+        <attribute name="data-type">string</attribute>
+      </attribute-group>
+    </field>
+
+    <field name="rarity" label="Rarity" category="column" value-type="integer">
+      <description>Numeric rarity value</description>
+      <attribute-group>
+        <attribute name="data-type">int</attribute>
+      </attribute-group>
+    </field>
+
+    <field name="classType" label="Class Type" category="column" value-type="string">
+      <description>Character class type</description>
+      <attribute-group>
+        <attribute name="data-type">string</attribute>
+      </attribute-group>
+    </field>
+
+    <field name="damageType" label="Damage Type" category="column" value-type="integer">
+      <description>Weapon damage type value</description>
+      <attribute-group>
+        <attribute name="data-type">int</attribute>
+      </attribute-group>
+    </field>
+
+    <field name="equippable" label="Is Equippable" category="column" value-type="boolean">
+      <description>Whether the item can be equipped</description>
+      <attribute-group>
+        <attribute name="data-type">bool</attribute>
+      </attribute-group>
+    </field>
+
+    <field name="isExotic" label="Is Exotic" category="column" value-type="boolean">
+      <description>Whether the item is Exotic</description>
+      <attribute-group>
+        <attribute name="data-type">bool</attribute>
+      </attribute-group>
+    </field>
+
+    <field name="isLegendary" label="Is Legendary" category="column" value-type="boolean">
+      <description>Whether the item is Legendary</description>
+      <attribute-group>
+        <attribute name="data-type">bool</attribute>
+      </attribute-group>
+    </field>
+
+    <field name="bucket" label="Bucket Hash" category="column" value-type="integer">
+      <description>Inventory bucket type hash</description>
+      <attribute-group>
+        <attribute name="data-type">int</attribute>
+      </attribute-group>
+    </field>
+
+    <field name="source" label="Source" category="column" value-type="string">
+      <description>Item source or acquisition method</description>
+      <attribute-group>
+        <attribute name="data-type">string</attribute>
+      </attribute-group>
+    </field>
+
+    <field name="referenceId" label="Reference ID" category="column" value-type="string">
+      <description>Reference ID (same as hash) for joining</description>
+      <attribute-group>
+        <attribute name="data-type">string</attribute>
+      </attribute-group>
+    </field>
+
     <field name="date" label="Date" category="column" value-type="date">
-      <description>Date of the price data</description>
+      <description>Date of the data (for time series)</description>
       <attribute-group>
         <attribute name="data-type">date</attribute>
-        <attribute name="is-primary-key">false</attribute>
         <attribute name="date-format">yyyy-MM-dd</attribute>
       </attribute-group>
     </field>
     
-    <field name="volume" label="Volume" category="column" value-type="integer">
-      <description>Trading volume</description>
+    <!-- Additional fields for weapon stats and vendor data -->
+    <field name="kills" label="Kills" category="column" value-type="integer">
+      <description>Number of kills with weapon</description>
       <attribute-group>
         <attribute name="data-type">int</attribute>
-        <attribute name="is-primary-key">false</attribute>
+      </attribute-group>
+    </field>
+
+    <field name="precision" label="Precision Kills" category="column" value-type="integer">
+      <description>Number of precision kills with weapon</description>
+      <attribute-group>
+        <attribute name="data-type">int</attribute>
+      </attribute-group>
+    </field>
+
+    <field name="usage" label="Usage Time" category="column" value-type="integer">
+      <description>Time spent using weapon</description>
+      <attribute-group>
+        <attribute name="data-type">int</attribute>
+      </attribute-group>
+    </field>
+
+    <field name="vendor" label="Vendor" category="column" value-type="string">
+      <description>Vendor selling the item</description>
+      <attribute-group>
+        <attribute name="data-type">string</attribute>
       </attribute-group>
     </field>
   </field-group>
-
 </connection-fields>
 

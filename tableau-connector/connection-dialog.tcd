@@ -7,8 +7,14 @@
     </authentication-options>
     
     <db-properties>
-      <db-property name="dataDate" label="Data Date" required="false" format="YYYY-MM-DD" value-type="string">
+      <db-property name="startDate" label="Start Date" required="false" format="YYYY-MM-DD" value-type="string">
         <validation-rule expression="^[0-9]{4}-[0-9]{2}-[0-9]{2}$|^$" error-message="Please enter a valid date in YYYY-MM-DD format or leave empty" />
+      </db-property>
+      <db-property name="endDate" label="End Date" required="false" format="YYYY-MM-DD" value-type="string">
+        <validation-rule expression="^[0-9]{4}-[0-9]{2}-[0-9]{2}$|^$" error-message="Please enter a valid date in YYYY-MM-DD format or leave empty" />
+      </db-property>
+      <db-property name="type" label="Data Type" required="false" value-type="string" default-value="items">
+        <validation-rule expression="^(items|weapons|vendors)$|^$" error-message="Invalid data type" />
       </db-property>
     </db-properties>
   </connection-config>
@@ -24,14 +30,26 @@
       <control-group>
         <control name="apiKey-control" label="API Key">
           <text-box name="apiKey" value-key="apiKey" placeholder="Enter your API key" required="true" />
-          <help-text>Enter the API key required to access the Vanguard financial data</help-text>
+          <help-text>Enter your Bungie API key</help-text>
         </control>
       </control-group>
       
       <control-group>
-        <control name="dataDate-control" label="Data Date">
-          <date-selector name="dataDate" value-key="dataDate" format="YYYY-MM-DD" required="false" />
-          <help-text>Enter the date for which you want to retrieve data (YYYY-MM-DD) or leave blank</help-text>
+        <control name="dateRange-control" label="Date Range">
+          <date-selector name="startDate" value-key="startDate" format="YYYY-MM-DD" required="false" />
+          <date-selector name="endDate" value-key="endDate" format="YYYY-MM-DD" required="false" />
+          <help-text>Enter the date range for which you want to retrieve data (YYYY-MM-DD) or leave blank</help-text>
+        </control>
+      </control-group>
+
+      <control-group>
+        <control name="type-control" label="Data Type">
+          <combo-box name="type" value-key="type">
+            <combo-box-item value="items" label="Items"/>
+            <combo-box-item value="weapons" label="Weapons"/>
+            <combo-box-item value="vendors" label="Vendors"/>
+          </combo-box>
+          <help-text>Select the type of data to retrieve</help-text>
         </control>
       </control-group>
     </control-section>

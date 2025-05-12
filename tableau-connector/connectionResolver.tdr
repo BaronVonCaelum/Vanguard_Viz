@@ -3,24 +3,55 @@
     <script>
       function apiRequest(params) {
         // Create base URL for API request
-        var baseUrl = 'https://api.vanguard.com/data';
+        var baseUrl = 'http://localhost:3000/api';
+        
+        // Get the data type (default to 'items' if not specified)
+        var dataType = params["properties"]["type"] || "items";
+        
+        // Choose endpoint based on data type
+        switch(dataType) {
+          case "items":
+            baseUrl += "/manifest-tables";
+            break;
+          case "weapons":
+            baseUrl += "/historical-weapon-stats";
+            break;
+          case "vendors":
+            baseUrl += "/vendor-inventory";
+            break;
+          default:
+            baseUrl += "/manifest-tables";
+        }
         
         // Add query parameters
         var urlParams = {};
         
-        // Add API Key to headers for authentication
+        // Add API Key to query parameters
         var apiKey = params["authentication"]["apiKey"];
         if (!apiKey || apiKey.length === 0) {
           throw "API Key is required";
         }
+        urlParams["apiKey"] = apiKey;
         
-        // Add data date to query parameters if provided
-        var dataDate = params["properties"]["dataDate"];
-        if (dataDate && dataDate.length > 0) {
-          urlParams["date"] = dataDate;
+        // Add date range parameters if provided
+        var startDate = params["properties"]["startDate"];
+        var endDate = params["properties"]["endDate"];
+        
+        if (startDate && startDate.length > 0) {
+          urlParams["startDate"] = startDate;
+          // If startDate is provided but endDate isn't, use startDate as endDate
+          urlParams["endDate"] = (endDate && endDate.length > 0) ? endDate : startDate;
+        } else if (endDate && endDate.length > 0) {
+          // If only endDate is provided, use it for both
+          urlParams["startDate"] = endDate;
+          urlParams["endDate"] = endDate;
         }
         
-        // No date parameter will be added if dataDate is empty
+        // Add specific parameters for weapons endpoint
+        if (dataType === "weapons") {
+          urlParams["membershipType"] = "3"; // Default to Steam
+          urlParams["destinyMembershipId"] = "0"; // Default to account-wide stats
+        }
         
         // Format URL with parameters
         var formattedUrl = baseUrl + '?' + Object.keys(urlParams).map(function(key) {
@@ -31,7 +62,6 @@
         return {
           "url": formattedUrl,
           "headers": {
-            "Authorization": "Bearer " + apiKey,
             "Content-Type": "application/json",
             "Accept": "application/json"
           }
@@ -53,14 +83,11 @@
   <connection-normalizer>
     <script>
       function normalizeConnection(connection) {
-        // Apply any connection string normalization if needed
-        // For example, ensure URL format is consistent
-        
         var normalized = connection;
         
         // Make sure we have a valid URL
         if (!normalized["url"]) {
-          normalized["url"] = "https://api.vanguard.com/data";
+          normalized["url"] = "http://localhost:3000/api/manifest-tables";
         }
         
         return normalized;
@@ -74,8 +101,8 @@
     <script>
       function getConnectionProperties(connection) {
         return {
-          "vendor": "vanguard",
-          "driver": "vanguard_api",
+          "vendor": "bungie",
+          "driver": "destiny2_api",
           "authentication": "custom"
         };
       }
