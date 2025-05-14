@@ -97,6 +97,112 @@ async function callBungieAPI(endpoint, params = {}, isFullUrl = false) {
     }
 }
 
+// Define transformers for different manifest definition types
+const definitionTransformers = {
+    DestinyInventoryItemDefinition: (item, hash) => {
+        // Safely get nested properties with proper type coercion
+        const displayProps = item.displayProperties || {};
+        const inventory = item.inventory || {};
+        
+        return {
+            hash: hash.toString(),
+            name: displayProps.name || "Unknown",
+            description: displayProps.description || "",
+            icon: displayProps.hasIcon ? `https://www.bungie.net${displayProps.icon}` : "",
+            type: item.itemTypeDisplayName || "Unknown Type",
+            tierType: inventory.tierTypeName || "Unknown",
+            rarity: Number(inventory.tierType || 0),
+            classType: getClassName(Number(item.classType)),
+            damageType: Number(item.defaultDamageType || 0),
+            damageTypeHash: item.defaultDamageTypeHash?.toString() || "0",
+            equippable: Boolean(item.equippable),
+            isExotic: Boolean(inventory.tierType === 6),
+            isLegendary: Boolean(inventory.tierType === 5),
+            bucketHash: inventory.bucketTypeHash?.toString() || "0",
+            referenceId: hash.toString()
+        };
+    },
+    
+    DestinyActivityDefinition: (item, hash) => ({
+        hash: hash.toString(),
+        name: item.displayProperties?.name || "Unknown",
+        description: item.displayProperties?.description || "",
+        icon: item.displayProperties?.hasIcon ? `https://www.bungie.net${item.displayProperties.icon}` : "",
+        type: item.activityTypeHash ? "activityType" : "activity",
+        activityTypeHash: item.activityTypeHash?.toString() || "0",
+        destinationHash: item.destinationHash?.toString() || "0",
+        placeHash: item.placeHash?.toString() || "0",
+        activityModeHash: item.activityModeHash?.toString() || "0",
+        isPlaylist: Boolean(item.isPlaylist),
+        recommended_light: item.recommendedLight || 0,
+        matchmaking: Boolean(item.matchmaking),
+        referenceId: hash.toString()
+    }),
+    
+    DestinyClassDefinition: (item, hash) => ({
+        hash: hash.toString(),
+        name: item.displayProperties?.name || "Unknown",
+        description: item.displayProperties?.description || "",
+        icon: item.displayProperties?.hasIcon ? `https://www.bungie.net${item.displayProperties.icon}` : "",
+        classType: getClassName(item.classType),
+        classTypeValue: item.classType || 0,
+        mentorVendorHash: item.mentorVendorHash?.toString() || "0",
+        referenceId: hash.toString()
+    }),
+    
+    DestinyDamageTypeDefinition: (item, hash) => ({
+        hash: hash.toString(),
+        name: item.displayProperties?.name || "Unknown",
+        description: item.displayProperties?.description || "",
+        icon: item.displayProperties?.hasIcon ? `https://www.bungie.net${item.displayProperties.icon}` : "",
+        enumValue: item.enumValue || 0,
+        color: item.transparentIconPath ? item.transparentIconPath.split('/').pop().split('.')[0] : "none",
+        showIcon: Boolean(item.showIcon),
+        referenceId: hash.toString()
+    }),
+    
+    DestinyStatDefinition: (item, hash) => ({
+        hash: hash.toString(),
+        name: item.displayProperties?.name || "Unknown",
+        description: item.displayProperties?.description || "",
+        icon: item.displayProperties?.hasIcon ? `https://www.bungie.net${item.displayProperties.icon}` : "",
+        aggregationType: item.aggregationType || 0,
+        hasComputedBlock: Boolean(item.hasComputedBlock),
+        statCategory: item.statCategory || 0,
+        interpolate: Boolean(item.interpolate),
+        referenceId: hash.toString()
+    }),
+    
+    DestinyVendorDefinition: (item, hash) => ({
+        hash: hash.toString(),
+        name: item.displayProperties?.name || "Unknown",
+        description: item.displayProperties?.description || "",
+        icon: item.displayProperties?.hasIcon ? `https://www.bungie.net${item.displayProperties.icon}` : "",
+        vendorProgressionType: item.vendorProgressionType || 0,
+        buyString: item.buyString || "",
+        sellString: item.sellString || "",
+        displayItemHash: item.displayItemHash?.toString() || "0",
+        inhibitBuying: Boolean(item.inhibitBuying),
+        inhibitSelling: Boolean(item.inhibitSelling),
+        factionHash: item.factionHash?.toString() || "0",
+        resetIntervalMinutes: item.resetIntervalMinutes || 0,
+        resetOffsetMinutes: item.resetOffsetMinutes || 0,
+        referenceId: hash.toString()
+    }),
+    
+    DestinyEquipmentSlotDefinition: (item, hash) => ({
+        hash: hash.toString(),
+        name: item.displayProperties?.name || "Unknown",
+        description: item.displayProperties?.description || "",
+        icon: item.displayProperties?.hasIcon ? `https://www.bungie.net${item.displayProperties.icon}` : "",
+        equipmentCategoryHash: item.equipmentCategoryHash?.toString() || "0",
+        bucketTypeHash: item.bucketTypeHash?.toString() || "0",
+        applyCustomArtDyes: Boolean(item.applyCustomArtDyes),
+        artDyeChannels: JSON.stringify(item.artDyeChannels || []),
+        referenceId: hash.toString()
+    })
+};
+
 // Helper function to fetch manifest definitions
 async function fetchManifestDefinitions(definitionType) {
     try {
@@ -128,117 +234,62 @@ async function fetchManifestDefinitions(definitionType) {
             throw new Error("Invalid definition response format");
         }
         
-        // Step 4: Transform the definitions into the exact format we need
+        // Step 4: Transform the definitions using the appropriate transformer
         console.log("Processing definition response...");
+        
+        // Get the appropriate transformer for this definition type
+        const transformer = definitionTransformers[definitionType];
+        if (!transformer) {
+            throw new Error(`No transformer found for definition type: ${definitionType}`);
+        }
+        
+        // Apply the transformer to each item
         const transformedDefinitions = Object.entries(definitionsResponse).map(([hash, item]) => {
             try {
-                // Safely get nested properties with proper type coercion
-                const displayProps = item.displayProperties || {};
-                const inventory = item.inventory || {};
-                
                 // Debug log for the first few items
                 if (parseInt(hash) < 3) {
                     console.log("Raw definition data:", {
                         hash,
-                        name: displayProps.name,
-                        type: item.itemTypeDisplayName,
-                        inventory: {
-                            tierType: inventory.tierType,
-                            tierTypeName: inventory.tierTypeName
-                        }
+                        type: definitionType,
+                        name: item.displayProperties?.name,
                     });
                 }
 
-                // Transform with strict type checking and proper defaults
-                const transformed = {
-                    hash: hash.toString(),
-                    name: displayProps.name || "Unknown",
-                    description: displayProps.description || "",
-                    icon: displayProps.hasIcon ? `https://www.bungie.net${displayProps.icon}` : "",
-                    type: item.itemTypeDisplayName || "Unknown Type",
-                    tierType: inventory.tierTypeName || "Unknown",
-                    rarity: Number(inventory.tierType || 0),
-                    classType: getClassName(Number(item.classType)),
-                    damageType: Number(item.defaultDamageType || 0),
-                    equippable: Boolean(item.equippable),
-                    isExotic: inventory.tierType === 6,
-                    isLegendary: inventory.tierType === 5,
-                    bucket: Number(inventory.bucketTypeHash || 0),
-                    source: item.collectibleHash ? "Collections" : 
-                           Array.isArray(item.sources) ? item.sources.map(s => s.sourceName).join(", ") : "Unknown",
-                    referenceId: hash.toString(),
-                    // Include these for Tableau compatibility
-                    kills: 0,
-                    precision: 0,
-                    usage: 0,
-                    vendor: "",
-                    date: ""  // Will be set by the endpoint if date is provided
-                };
+                // Apply the transformer
+                const transformed = transformer(item, hash);
+                
+                // Add standard fields for Tableau compatibility
+                transformed.kills = 0;
+                transformed.precision = 0;
+                transformed.usage = 0;
+                transformed.vendor = "";
+                transformed.date = "";  // Will be set by the endpoint if date is provided
 
                 // Verify all fields have proper types
                 Object.entries(transformed).forEach(([key, value]) => {
                     if (value === null || value === undefined) {
                         console.warn(`Null/undefined value for field ${key} in item ${hash}`);
                         // Set appropriate default based on field type
-                        switch (key) {
-                            case 'hash':
-                            case 'name':
-                            case 'description':
-                            case 'icon':
-                            case 'type':
-                            case 'tierType':
-                            case 'classType':
-                            case 'source':
-                            case 'referenceId':
-                            case 'vendor':
-                            case 'date':
-                                transformed[key] = "";
-                                break;
-                            case 'rarity':
-                            case 'damageType':
-                            case 'bucket':
-                            case 'kills':
-                            case 'precision':
-                            case 'usage':
-                                transformed[key] = 0;
-                                break;
-                            case 'equippable':
-                            case 'isExotic':
-                            case 'isLegendary':
-                                transformed[key] = false;
-                                break;
+                        if (typeof transformed[key] === 'string' || key.endsWith('Hash') || 
+                            ['hash', 'name', 'description', 'icon', 'type', 'tierType', 
+                             'classType', 'source', 'referenceId', 'vendor', 'date'].includes(key)) {
+                            transformed[key] = "";
+                        } else if (typeof transformed[key] === 'number' || 
+                                  ['rarity', 'damageType', 'bucket', 'kills', 'precision', 'usage'].includes(key)) {
+                            transformed[key] = 0;
+                        } else if (typeof transformed[key] === 'boolean' || 
+                                  ['equippable', 'isExotic', 'isLegendary', 'isPlaylist', 'matchmaking'].includes(key)) {
+                            transformed[key] = false;
                         }
                     }
                 });
-
+                
                 return transformed;
             } catch (error) {
                 console.error(`Error transforming item ${hash}:`, error);
-                // Return a valid but empty item rather than null
-                return {
-                    hash: hash.toString(),
-                    name: "Error Item",
-                    description: "",
-                    icon: "",
-                    type: "Unknown Type",
-                    tierType: "Unknown",
-                    rarity: 0,
-                    classType: "Unknown",
-                    damageType: 0,
-                    equippable: false,
-                    isExotic: false,
-                    isLegendary: false,
-                    bucket: 0,
-                    source: "Unknown",
-                    referenceId: hash.toString(),
-                    kills: 0,
-                    precision: 0,
-                    usage: 0,
-                    vendor: "",
-                    date: ""
-                };
+                return null;
             }
-        });
+        }).filter(item => item !== null);
         
         console.log(`Successfully transformed ${transformedDefinitions.length} ${definitionType} definitions`);
         // Log the first item to verify structure
@@ -1112,10 +1163,132 @@ app.get("/api/vendor-inventory", async (req, res) => {
     }
 });
 
-// Manifest tables endpoint for proper Tableau integration
-app.get("/api/manifest-tables", async (req, res) => {
+// Utility function to filter inventory items before transformation
+function filterInventoryItems(rawItems, filters) {
+    // Clone the object to avoid modifying the original
+    let filtered = {...rawItems};
+    const MAX_ITEMS = parseInt(process.env.MAX_ITEMS) || 5000;
+    let itemCount = Object.keys(filtered).length;
+    let appliedFilters = [];
+    
+    // Filter by itemCategoryHash if provided
+    if (filters.itemCategoryHash) {
+        const categoryHash = filters.itemCategoryHash;
+        console.log(`Filtering by itemCategoryHash: ${categoryHash}`);
+        appliedFilters.push(`itemCategoryHash=${categoryHash}`);
+        
+        filtered = Object.fromEntries(
+            Object.entries(filtered).filter(([_, item]) => {
+                return item.itemCategoryHashes && 
+                       Array.isArray(item.itemCategoryHashes) && 
+                       item.itemCategoryHashes.includes(parseInt(categoryHash));
+            })
+        );
+    }
+    
+    // Filter by classType if provided (0=Titan, 1=Hunter, 2=Warlock, 3=Any)
+    if (filters.classType !== undefined && filters.classType !== null) {
+        const classType = parseInt(filters.classType);
+        if (!isNaN(classType) && classType >= 0 && classType <= 3) {
+            console.log(`Filtering by classType: ${classType}`);
+            appliedFilters.push(`classType=${classType}`);
+            
+            filtered = Object.fromEntries(
+                Object.entries(filtered).filter(([_, item]) => {
+                    // If classType is 3 (Any), include items with classType 3 or undefined
+                    if (classType === 3) {
+                        return item.classType === 3 || item.classType === undefined;
+                    }
+                    // Otherwise match the specific class or include items for all classes (classType=3)
+                    return item.classType === classType || item.classType === 3;
+                })
+            );
+        }
+    }
+    
+    // Filter by rarity/tierType if provided
+    if (filters.rarity !== undefined && filters.rarity !== null) {
+        const rarity = parseInt(filters.rarity);
+        if (!isNaN(rarity) && rarity >= 0) {
+            console.log(`Filtering by rarity/tierType: ${rarity}`);
+            appliedFilters.push(`rarity=${rarity}`);
+            
+            filtered = Object.fromEntries(
+                Object.entries(filtered).filter(([_, item]) => {
+                    return item.inventory && item.inventory.tierType === rarity;
+                })
+            );
+        }
+    }
+    
+    // Filter by searchTerm if provided
+    if (filters.searchTerm) {
+        const searchTerm = filters.searchTerm.toLowerCase();
+        console.log(`Filtering by searchTerm: ${searchTerm}`);
+        appliedFilters.push(`searchTerm=${searchTerm}`);
+        
+        filtered = Object.fromEntries(
+            Object.entries(filtered).filter(([_, item]) => {
+                return (
+                    (item.displayProperties && 
+                     item.displayProperties.name && 
+                     item.displayProperties.name.toLowerCase().includes(searchTerm)) ||
+                    (item.itemTypeDisplayName && 
+                     item.itemTypeDisplayName.toLowerCase().includes(searchTerm))
+                );
+            })
+        );
+    }
+    
+    // Filter by itemType if provided
+    if (filters.itemType) {
+        console.log(`Filtering by itemType: ${filters.itemType}`);
+        appliedFilters.push(`itemType=${filters.itemType}`);
+        
+        filtered = Object.fromEntries(
+            Object.entries(filtered).filter(([_, item]) => {
+                return item.itemTypeDisplayName && 
+                       item.itemTypeDisplayName.toLowerCase().includes(filters.itemType.toLowerCase());
+            })
+        );
+    }
+    
+    // Check if the filtered dataset is still too large
+    const filteredCount = Object.keys(filtered).length;
+    const isTooBig = filteredCount > MAX_ITEMS;
+    const warning = isTooBig 
+        ? `Filtered result set (${filteredCount} items) exceeds maximum limit (${MAX_ITEMS}). Please apply more specific filters.`
+        : null;
+    
+    // If filtered result is too large and we can provide a sample
+    if (isTooBig) {
+        // Take a sample of MAX_ITEMS
+        const allKeys = Object.keys(filtered);
+        const sampleKeys = allKeys.slice(0, MAX_ITEMS);
+        filtered = Object.fromEntries(
+            sampleKeys.map(key => [key, filtered[key]])
+        );
+    }
+    
+    console.log(`Filtering reduced item count from ${itemCount} to ${Object.keys(filtered).length}`);
+    if (appliedFilters.length > 0) {
+        console.log(`Applied filters: ${appliedFilters.join(", ")}`);
+    }
+    
+    return {
+        filteredItems: filtered,
+        originalCount: itemCount,
+        filteredCount: Object.keys(filtered).length,
+        warning: warning,
+        appliedFilters: appliedFilters
+    };
+}
+
+// New endpoint to fetch specific manifest table data
+app.get("/api/manifest/:type", async (req, res) => {
     try {
-        const { apiKey, date } = req.query;
+        const { apiKey } = req.query;
+        const { type } = req.params;
         
         if (!apiKey) {
             return res.status(400).json({ 
@@ -1124,18 +1297,204 @@ app.get("/api/manifest-tables", async (req, res) => {
             });
         }
 
-        // Get item definitions - already properly transformed
-        const transformedData = await fetchManifestDefinitions('DestinyInventoryItemDefinition');
+        // Map endpoint type to definition type
+        const definitionTypeMap = {
+            'activities': 'DestinyActivityDefinition',
+            'classes': 'DestinyClassDefinition',
+            'inventory-items': 'DestinyInventoryItemDefinition',
+            'damage-types': 'DestinyDamageTypeDefinition',
+            'stats': 'DestinyStatDefinition',
+            'vendors': 'DestinyVendorDefinition',
+            'equipment-slots': 'DestinyEquipmentSlotDefinition'
+        };
         
-        // Add date if provided
-        if (date) {
-            transformedData.forEach(item => {
-                item.date = date;
+        const definitionType = definitionTypeMap[type];
+        if (!definitionType) {
+            return res.status(400).json({
+                error: "Invalid Type",
+                message: `Type must be one of: ${Object.keys(definitionTypeMap).join(', ')}`
+            });
+        }
+        
+        // Check if this is the inventory-items endpoint with filter parameters
+        if (type === 'inventory-items') {
+            // Extract filter parameters
+            const filterParams = {
+                itemCategoryHash: req.query.itemCategoryHash,
+                classType: req.query.classType,
+                rarity: req.query.rarity,
+                searchTerm: req.query.searchTerm,
+                itemType: req.query.itemType
+            };
+            
+            const hasFilters = Object.values(filterParams).some(val => val !== undefined);
+            
+            if (hasFilters) {
+                // We'll handle filtering differently for inventory items
+                console.log("Processing inventory items with filtering");
+                
+                // Step 1: Get the manifest paths - same as in fetchManifestDefinitions
+                const manifestResponse = await callBungieAPI('/Destiny2/Manifest/');
+                
+                if (!manifestResponse.Response || !manifestResponse.Response.jsonWorldComponentContentPaths) {
+                    throw new Error("Invalid manifest response format");
+                }
+                
+                // Get English (or specified language) paths
+                const language = process.env.MANIFEST_LANGUAGE || 'en';
+                const contentPaths = manifestResponse.Response.jsonWorldComponentContentPaths[language];
+                
+                if (!contentPaths || !contentPaths[definitionType]) {
+                    throw new Error(`Definition path not found for type: ${definitionType}`);
+                }
+                
+                // Step 2: Get the full URL for the definition JSON
+                const definitionPath = contentPaths[definitionType];
+                const fullUrl = `https://www.bungie.net${definitionPath}`;
+                
+                // Step 3: Fetch the actual definitions
+                const definitionsResponse = await callBungieAPI(fullUrl, {}, true);
+                
+                if (!definitionsResponse || typeof definitionsResponse !== 'object') {
+                    throw new Error("Invalid definition response format");
+                }
+                
+                // Step 4: Apply filtering BEFORE transformation
+                const { 
+                    filteredItems, 
+                    originalCount, 
+                    filteredCount, 
+                    warning,
+                    appliedFilters 
+                } = filterInventoryItems(definitionsResponse, filterParams);
+                
+                // Step 5: Transform the filtered definitions
+                console.log("Transforming filtered inventory items");
+                
+                // Get the transformer for this definition type
+                const transformer = definitionTransformers[definitionType];
+                if (!transformer) {
+                    throw new Error(`No transformer found for definition type: ${definitionType}`);
+                }
+                
+                // Apply the transformer to each filtered item
+                const transformedDefinitions = Object.entries(filteredItems).map(([hash, item]) => {
+                    try {
+                        // Apply the transformer
+                        const transformed = transformer(item, hash);
+                        
+                        // Add standard fields for Tableau compatibility
+                        transformed.kills = 0;
+                        transformed.precision = 0;
+                        transformed.usage = 0;
+                        transformed.vendor = "";
+                        transformed.date = "";
+                        
+                        // Verify all fields have proper types
+                        Object.entries(transformed).forEach(([key, value]) => {
+                            if (value === null || value === undefined) {
+                                console.warn(`Null/undefined value for field ${key} in item ${hash}`);
+                                // Set appropriate default based on field type
+                                if (typeof transformed[key] === 'string' || 
+                                    key.endsWith('Hash') || 
+                                    ['hash', 'name', 'description', 'icon', 'type', 'tierType', 
+                                     'classType', 'source', 'referenceId', 'vendor', 'date'].includes(key)) {
+                                    transformed[key] = "";
+                                } else if (typeof transformed[key] === 'number' || 
+                                          ['rarity', 'damageType', 'bucket', 'kills', 'precision', 'usage'].includes(key)) {
+                                    transformed[key] = 0;
+                                } else if (typeof transformed[key] === 'boolean' || 
+                                          ['equippable', 'isExotic', 'isLegendary', 'isPlaylist', 'matchmaking'].includes(key)) {
+                                    transformed[key] = false;
+                                }
+                            }
+                        });
+                        
+                        return transformed;
+                    } catch (error) {
+                        console.error(`Error transforming item ${hash}:`, error);
+                        return null;
+                    }
+                }).filter(item => item !== null);
+                
+                // Include warning about large dataset if needed
+                let response = {
+                    data: transformedDefinitions
+                };
+                
+                if (warning) {
+                    response.warning = warning;
+                    response.originalCount = originalCount;
+                    response.filteredCount = filteredCount;
+                    response.appliedFilters = appliedFilters;
+                }
+                
+                console.log(`Returning ${transformedDefinitions.length} filtered ${type} records`);
+                return res.json(response.data);
+            }
+        }
+        
+        // Fetch and transform the data
+        const transformedData = await fetchManifestDefinitions(definitionType);
+        
+        console.log(`Returning ${transformedData.length} ${type} records`);
+        return res.json(transformedData);
+        
+    } catch (error) {
+        console.error("Error in manifest endpoint:", error);
+        res.status(500).json({ 
+            error: "Failed to fetch manifest data",
+            message: error.message 
+        });
+    }
+});
+
+// Manifest tables endpoint
+app.get("/api/manifest-tables", async (req, res) => {
+    try {
+        const { apiKey, tables, date } = req.query;
+        
+        if (!apiKey) {
+            return res.status(400).json({ 
+                error: "Missing API Key",
+                message: "API Key is required" 
             });
         }
 
-        console.log(`Returning ${transformedData.length} manifest records`);
-        return res.json(transformedData);
+        // If no specific tables requested, default to InventoryItems
+        const requestedTables = tables ? tables.split(',') : ['DestinyInventoryItemDefinition'];
+        
+        // Validate requested tables
+        const validTables = Object.keys(definitionTransformers);
+        const invalidTables = requestedTables.filter(table => !validTables.includes(table));
+        
+        if (invalidTables.length > 0) {
+            return res.status(400).json({
+                error: "Invalid Tables",
+                message: `Invalid tables requested: ${invalidTables.join(', ')}. Valid tables are: ${validTables.join(', ')}`
+            });
+        }
+
+        // Fetch all requested tables
+        const results = {};
+        await Promise.all(requestedTables.map(async (table) => {
+            try {
+                results[table] = await fetchManifestDefinitions(table);
+                
+                // Add date if provided
+                if (date) {
+                    results[table].forEach(item => {
+                        item.date = date;
+                    });
+                }
+            } catch (error) {
+                console.error(`Error fetching ${table}:`, error);
+                results[table] = [];
+            }
+        }));
+
+        console.log(`Returning data for ${Object.keys(results).length} manifest tables`);
+        return res.json(results);
 
     } catch (error) {
         console.error("Error in manifest-tables endpoint:", error);
@@ -1154,6 +1513,16 @@ app.get("/api/status", (req, res) => {
         using_sample_data: USE_SAMPLE_DATA,
         cache_ttl: process.env.CACHE_DURATION || 3600,
         api_root: BUNGIE_API_ROOT
+    });
+});
+
+// Cache management endpoint
+app.get("/api/clear-cache", (req, res) => {
+    apiCache.flushAll();
+    console.log("Cache cleared");
+    res.json({
+        status: "success",
+        message: "Cache cleared successfully"
     });
 });
 
@@ -1176,8 +1545,11 @@ app.listen(port, () => {
     console.log(`Historical weapon stats: http://localhost:${port}/api/historical-weapon-stats?apiKey=test&startDate=${weekAgo}&endDate=${today}&membershipType=3&destinyMembershipId=12345678`);
     console.log(`Vendor inventory: http://localhost:${port}/api/vendor-inventory?apiKey=test&startDate=${weekAgo}&endDate=${today}`);
     
-    // Manifest tables endpoint
-    console.log(`Manifest tables: http://localhost:${port}/api/manifest-tables?apiKey=test&tables=DestinyInventoryItemDefinition`);
+    // Manifest tables endpoints
+    console.log(`Manifest tables (multiple): http://localhost:${port}/api/manifest-tables?apiKey=test&tables=DestinyInventoryItemDefinition,DestinyClassDefinition`);
+    console.log(`Manifest activities: http://localhost:${port}/api/manifest/activities?apiKey=test`);
+    console.log(`Manifest classes: http://localhost:${port}/api/manifest/classes?apiKey=test`);
+    console.log(`Manifest items: http://localhost:${port}/api/manifest/inventory-items?apiKey=test`);
     
     if (USE_SAMPLE_DATA) {
         console.log("NOTICE: Using SAMPLE DATA mode (configured in .env)");

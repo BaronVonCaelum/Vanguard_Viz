@@ -2,6 +2,16 @@
     // Create the connector object
     var myConnector = tableau.makeConnector();
     
+    // Add debug helper
+    function logTableauState() {
+        console.log("=== Tableau State ===");
+        console.log("Phase:", tableau.phase);
+        console.log("Auth Type:", tableau.authType);
+        console.log("Connection Name:", tableau.connectionName);
+        console.log("Connection Data:", tableau.connectionData);
+        console.log("==================");
+    }
+    
     // Log initialization for debugging
     console.log("Initializing Destiny 2 Data Connector...");
     console.log("Tableau version: " + tableau.versionNumber);
@@ -9,169 +19,337 @@
     
     // Define the schema
     myConnector.getSchema = function(schemaCallback) {
-        console.log("Building Destiny 2 data schema...");
+        console.log("Building Destiny 2 manifest schema...");
         
-        var cols = [{
-            id: "itemName",
-            dataType: tableau.dataTypeEnum.string,
-            alias: "Item Name",
-            description: "Name of the Destiny 2 item or weapon"
-        }, {
-            id: "powerLevel",
-            dataType: tableau.dataTypeEnum.float,
-            alias: "Power Level",
-            description: "Power/Light level of the item"
-        }, {
-            id: "startDate",
-            dataType: tableau.dataTypeEnum.date,
-            alias: "Start Date",
-            description: "Start date of the data range (optional)"
-        }, {
-            id: "endDate",
-            dataType: tableau.dataTypeEnum.date,
-            alias: "End Date",
-            description: "End date of the data range (optional)"
-        }, {
-            id: "popularity",
-            dataType: tableau.dataTypeEnum.int,
-            alias: "Usage Count",
-            description: "Number of Guardians using this item"
-        }];
+        var tableSchemas = [
+            {
+                id: "activities",
+                alias: "Destiny 2 Activities",
+                columns: [
+                    { id: "hash", dataType: tableau.dataTypeEnum.string },
+                    { id: "name", dataType: tableau.dataTypeEnum.string },
+                    { id: "description", dataType: tableau.dataTypeEnum.string },
+                    { id: "icon", dataType: tableau.dataTypeEnum.string },
+                    { id: "type", dataType: tableau.dataTypeEnum.string },
+                    { id: "activityTypeHash", dataType: tableau.dataTypeEnum.string },
+                    { id: "destinationHash", dataType: tableau.dataTypeEnum.string },
+                    { id: "placeHash", dataType: tableau.dataTypeEnum.string },
+                    { id: "activityModeHash", dataType: tableau.dataTypeEnum.string },
+                    { id: "isPlaylist", dataType: tableau.dataTypeEnum.bool },
+                    { id: "recommended_light", dataType: tableau.dataTypeEnum.int },
+                    { id: "matchmaking", dataType: tableau.dataTypeEnum.bool },
+                    { id: "referenceId", dataType: tableau.dataTypeEnum.string }
+                ]
+            },
+            {
+                id: "classes",
+                alias: "Destiny 2 Classes",
+                columns: [
+                    { id: "hash", dataType: tableau.dataTypeEnum.string },
+                    { id: "name", dataType: tableau.dataTypeEnum.string },
+                    { id: "description", dataType: tableau.dataTypeEnum.string },
+                    { id: "icon", dataType: tableau.dataTypeEnum.string },
+                    { id: "classType", dataType: tableau.dataTypeEnum.string },
+                    { id: "classTypeValue", dataType: tableau.dataTypeEnum.int },
+                    { id: "mentorVendorHash", dataType: tableau.dataTypeEnum.string },
+                    { id: "referenceId", dataType: tableau.dataTypeEnum.string }
+                ]
+            },
+            {
+                id: "inventory_items",
+                alias: "Destiny 2 Inventory Items",
+                columns: [
+                    { id: "hash", dataType: tableau.dataTypeEnum.string },
+                    { id: "name", dataType: tableau.dataTypeEnum.string },
+                    { id: "description", dataType: tableau.dataTypeEnum.string },
+                    { id: "icon", dataType: tableau.dataTypeEnum.string },
+                    { id: "type", dataType: tableau.dataTypeEnum.string },
+                    { id: "tierType", dataType: tableau.dataTypeEnum.string },
+                    { id: "rarity", dataType: tableau.dataTypeEnum.int },
+                    { id: "classType", dataType: tableau.dataTypeEnum.string },
+                    { id: "damageType", dataType: tableau.dataTypeEnum.int },
+                    { id: "damageTypeHash", dataType: tableau.dataTypeEnum.string },
+                    { id: "equippable", dataType: tableau.dataTypeEnum.bool },
+                    { id: "isExotic", dataType: tableau.dataTypeEnum.bool },
+                    { id: "isLegendary", dataType: tableau.dataTypeEnum.bool },
+                    { id: "bucketHash", dataType: tableau.dataTypeEnum.string },
+                    { id: "referenceId", dataType: tableau.dataTypeEnum.string }
+                ]
+            },
+            {
+                id: "damage_types",
+                alias: "Destiny 2 Damage Types",
+                columns: [
+                    { id: "hash", dataType: tableau.dataTypeEnum.string },
+                    { id: "name", dataType: tableau.dataTypeEnum.string },
+                    { id: "description", dataType: tableau.dataTypeEnum.string },
+                    { id: "icon", dataType: tableau.dataTypeEnum.string },
+                    { id: "enumValue", dataType: tableau.dataTypeEnum.int },
+                    { id: "color", dataType: tableau.dataTypeEnum.string },
+                    { id: "showIcon", dataType: tableau.dataTypeEnum.bool },
+                    { id: "referenceId", dataType: tableau.dataTypeEnum.string }
+                ]
+            }
+        ];
 
-        var tableSchema = {
-            id: "destiny2Data",
-            alias: "Destiny 2 Guardian Items",
-            description: "Item data from the Destiny 2 API",
-            columns: cols
-        };
+        // Also add the remaining tables (stats, vendors, equipment_slots)
+        var additionalTables = [
+            {
+                id: "stats",
+                alias: "Destiny 2 Stats",
+                columns: [
+                    { id: "hash", dataType: tableau.dataTypeEnum.string },
+                    { id: "name", dataType: tableau.dataTypeEnum.string },
+                    { id: "description", dataType: tableau.dataTypeEnum.string },
+                    { id: "icon", dataType: tableau.dataTypeEnum.string },
+                    { id: "aggregationType", dataType: tableau.dataTypeEnum.int },
+                    { id: "hasComputedBlock", dataType: tableau.dataTypeEnum.bool },
+                    { id: "statCategory", dataType: tableau.dataTypeEnum.int },
+                    { id: "interpolate", dataType: tableau.dataTypeEnum.bool },
+                    { id: "referenceId", dataType: tableau.dataTypeEnum.string }
+                ]
+            },
+            {
+                id: "vendors",
+                alias: "Destiny 2 Vendors",
+                columns: [
+                    { id: "hash", dataType: tableau.dataTypeEnum.string },
+                    { id: "name", dataType: tableau.dataTypeEnum.string },
+                    { id: "description", dataType: tableau.dataTypeEnum.string },
+                    { id: "icon", dataType: tableau.dataTypeEnum.string },
+                    { id: "vendorProgressionType", dataType: tableau.dataTypeEnum.int },
+                    { id: "buyString", dataType: tableau.dataTypeEnum.string },
+                    { id: "sellString", dataType: tableau.dataTypeEnum.string },
+                    { id: "displayItemHash", dataType: tableau.dataTypeEnum.string },
+                    { id: "inhibitBuying", dataType: tableau.dataTypeEnum.bool },
+                    { id: "inhibitSelling", dataType: tableau.dataTypeEnum.bool },
+                    { id: "factionHash", dataType: tableau.dataTypeEnum.string },
+                    { id: "resetIntervalMinutes", dataType: tableau.dataTypeEnum.int },
+                    { id: "resetOffsetMinutes", dataType: tableau.dataTypeEnum.int },
+                    { id: "referenceId", dataType: tableau.dataTypeEnum.string }
+                ]
+            },
+            {
+                id: "equipment_slots",
+                alias: "Destiny 2 Equipment Slots",
+                columns: [
+                    { id: "hash", dataType: tableau.dataTypeEnum.string },
+                    { id: "name", dataType: tableau.dataTypeEnum.string },
+                    { id: "description", dataType: tableau.dataTypeEnum.string },
+                    { id: "icon", dataType: tableau.dataTypeEnum.string },
+                    { id: "equipmentCategoryHash", dataType: tableau.dataTypeEnum.string },
+                    { id: "bucketTypeHash", dataType: tableau.dataTypeEnum.string },
+                    { id: "applyCustomArtDyes", dataType: tableau.dataTypeEnum.bool },
+                    { id: "artDyeChannels", dataType: tableau.dataTypeEnum.string },
+                    { id: "referenceId", dataType: tableau.dataTypeEnum.string }
+                ]
+            }
+        ];
 
-        console.log("Schema created successfully");
-        schemaCallback([tableSchema]);
+        // Combine all tables
+        tableSchemas = tableSchemas.concat(additionalTables);
+
+        console.log("Schema created successfully with " + tableSchemas.length + " tables");
+        schemaCallback(tableSchemas);
     };
 
     // Download the data
     myConnector.getData = function(table, doneCallback) {
-        // Get the parameters from the connection data
+        console.log("getData called for table:", table.tableInfo.id);
+        
+        // Get connection data including selected tables
         var connectionData = JSON.parse(tableau.connectionData || '{}');
-        var apiKey = tableau.password || ""; // Use password for API key
+        var apiKey = tableau.password || connectionData.apiKey;  // Use password if available
+        var dataDate = connectionData.dataDate;
         
-        // Get date parameters if they exist
-        var startDate = connectionData.startDate || "";
-        var endDate = connectionData.endDate || "";
+        // Debug logging for API key
+        console.log("API Key source:", {
+            fromPassword: !!tableau.password,
+            fromConnectionData: !!connectionData.apiKey,
+            finalKeyExists: !!apiKey
+        });
         
-        console.log("Date parameters - startDate: " + (startDate || "not provided") + ", endDate: " + (endDate || "not provided"));
-        
-        // Ensure dates are in the correct format (YYYY-MM-DD) if provided
-        try {
-            // Validate date objects if they are provided
-            if (startDate) {
-                var startDateObj = new Date(startDate);
-                if (isNaN(startDateObj.getTime())) {
-                    throw new Error("Invalid start date format");
-                }
-                startDate = startDateObj.toISOString().split('T')[0];
-            }
-            
-            if (endDate) {
-                var endDateObj = new Date(endDate);
-                if (isNaN(endDateObj.getTime())) {
-                    throw new Error("Invalid end date format");
-                }
-                endDate = endDateObj.toISOString().split('T')[0];
-            }
-        } catch (e) {
-            console.error("Error formatting dates:", e);
-            tableau.abortWithError("Invalid Date Format: Dates must be in YYYY-MM-DD format");
+        // Validate API key exists
+        if (!apiKey) {
+            console.error("No API key found in either password or connectionData");
+            tableau.abortWithError("API Key is required. Please enter your Bungie API key.");
             return;
         }
         
-        console.log("Guardian, fetching Destiny 2 data" + (startDate ? " from " + startDate : "") + (endDate ? " to " + endDate : ""));
-        console.log("Using Bungie API Key: " + (apiKey ? "******" : "None provided"));
+        // Map table IDs to API endpoints
+        var endpointMap = {
+            'inventory_items': '/api/manifest/inventory-items',
+            'activities': '/api/manifest/activities',
+            'classes': '/api/manifest/classes',
+            'damage_types': '/api/manifest/damage-types',
+            'stats': '/api/manifest/stats',
+            'vendors': '/api/manifest/vendors',
+            'equipment_slots': '/api/manifest/equipment-slots'
+        };
+
+        // Build the full URL using our local server
+        var endpoint = 'http://localhost:3000' + endpointMap[table.tableInfo.id];
         
-        // Construct the API URL
-        var apiUrl = "/api/data";
-        
-        // Make the AJAX request
-        console.log("Sending request to: " + apiUrl);
-        // Build request data with only provided parameters
+        if (!endpoint) {
+            console.error("Unknown table:", table.tableInfo.id);
+            tableau.abortWithError("Unknown table: " + table.tableInfo.id);
+            return;
+        }
+
+        console.log("Fetching data from endpoint:", endpoint);
+        // Build filter parameters based on table type
+        // Build filter parameters based on table type
         var requestData = {
-            apiKey: apiKey
+            apiKey: apiKey,  // Required by our local server
+            date: dataDate,
+            destiny2Only: true,  // Filter for Destiny 2 content only
+            gameVersion: 2,      // Specifically Destiny 2 (not Destiny 1)
+            locale: 'en'         // English language content only
         };
         
-        // Only add date parameters if they're provided
-        if (startDate) {
-            requestData.startDate = startDate;
+        // Add table-specific filters
+        switch(table.tableInfo.id) {
+            case 'inventory_items':
+                requestData.itemCategoryType = 1;       // Primary/Special/Heavy weapons
+                requestData.itemSubType = {
+                    in: [
+                        6,  // Auto Rifle
+                        7,  // Hand Cannon
+                        8,  // Pulse Rifle
+                        9,  // Scout Rifle
+                        10, // Fusion Rifle
+                        11, // Sniper Rifle
+                        12, // Shotgun
+                        13, // Machine Gun
+                        14, // Rocket Launcher
+                        17, // Submachine Gun
+                        18, // Trace Rifle
+                        19, // Linear Fusion Rifle
+                        20, // Grenade Launcher
+                        21, // Sword
+                        22, // Glaive
+                        23, // Bow
+                    ]
+                };
+                requestData.tierType = ['Legendary', 'Exotic'];  // Only legendary and exotic items
+                requestData.hasDamageType = true;               // Must have a damage type
+                requestData.damageType = {                      // Must have a valid damage type value
+                    exists: true,
+                    notEqual: 0                                 // 0 typically means no damage type
+                };
+                requestData.hasStats = true;                    // Must have stats (like RPM)
+                break;
+                
+            case 'activities':
+                requestData.isAvailable = true;    // Only currently available activities
+                requestData.isVisible = true;      // Only visible activities
+                break;
+                
+            case 'vendors':
+                requestData.hasInventory = true;   // Only vendors with inventory
+                requestData.isActive = true;       // Only active vendors
+                break;
+                
+            case 'stats':
+                requestData.statCategory = 1;        // Weapon stats only
+                requestData.isDisplayable = true;    // Only stats that are meant to be displayed
+                requestData.hasComputedBlock = false; // Only base stats
+                requestData.isWeaponStat = true;     // Only weapon-related stats
+                requestData.statHash = {             // Only specific weapon stats
+                    in: [
+                        4284893193,   // Rounds Per Minute
+                        3614673599,   // Blast Radius
+                        2523465841,   // Velocity
+                        1240592695,   // Range
+                        155624089,    // Stability
+                        943549884,    // Handling
+                        4188031367,   // Reload Speed
+                        1345609583,   // Aim Assistance
+                        2714457168,   // Airborne Effectiveness
+                        3555269338,   // Zoom
+                        2961396640    // Charge Time
+                    ]
+                };
+                break;
+                
+            case 'damage_types':
+                requestData.showIcon = true;         // Only damage types with icons
+                requestData.exists = true;           // Must exist in current game
+                requestData.enumValue = {            // Valid damage types only
+                    notEqual: 0,                     // Not "None"
+                    in: [1, 2, 3, 4, 6, 7]          // Kinetic, Arc, Solar, Void, Stasis, Strand
+                };
+                break;
         }
-        if (endDate) {
-            requestData.endDate = endDate;
-        }
-        
+
         $.ajax({
-            url: apiUrl,
+            url: endpoint,
+            headers: {
+                'X-API-Key': apiKey,  // Required by Bungie API
+                'Accept': 'application/json',
+                'User-Agent': 'Vanguard_Viz/1.0 AppId/54134 (https://public.tableau.com/app/profile/josh.caelum/vizzes;josh@housecaelum.com)'
+            },
             data: requestData,
-            dataType: 'json',
             success: function(resp) {
-                console.log("Data received from server, processing...");
+                console.log("Received data for table:", table.tableInfo.id);
+                console.log("Number of records:", resp.length);
+                
                 var tableData = [];
                 
-                // Map the API response to our schema
-                if (Array.isArray(resp)) {
-                    console.log("Processing " + resp.length + " items from the Bungie API");
-                    for (var i = 0; i < resp.length; i++) {
-                        var row = {
-                            "itemName": resp[i].symbol,
-                            "powerLevel": resp[i].price,
-                            "popularity": resp[i].volume
-                        };
+                // Process the response data according to the table schema
+                for (var i = 0; i < resp.length; i++) {
+                    var row = {};
+                    // Map each column from the schema to the response data
+                    table.tableInfo.columns.forEach(function(column) {
+                        var value;
                         
-                        // Add dates if provided
-                        if (startDate) {
-                            row.startDate = startDate;
-                        }
-                        if (endDate) {
-                            row.endDate = endDate;
+                        // Handle special fields
+                        if (column.id === "name" || column.id === "description" || column.id === "icon") {
+                            // Handle displayProperties fields
+                            if (column.id === "icon" && resp[i].displayProperties?.hasIcon) {
+                                value = `https://www.bungie.net${resp[i].displayProperties.icon}`;
+                            } else {
+                                value = resp[i].displayProperties?.[column.id] || "";
+                            }
+                        } else if (column.id === "type" && table.tableInfo.id === "inventory_items") {
+                            // For inventory items, get the itemType
+                            value = resp[i].itemTypeAndTierDisplayName || resp[i].itemTypeDisplayName || "";
+                        } else if (column.id === "damageType") {
+                            // Get actual damage type value
+                            value = resp[i].defaultDamageType || 0;
+                        } else if (column.id === "tierType") {
+                            // Get tier type (Exotic, Legendary, etc.)
+                            value = resp[i].inventory?.tierTypeName || "";
+                        } else {
+                            // Handle other fields normally
+                            value = resp[i][column.id];
                         }
                         
-                        tableData.push(row);
-                    }
-                } else {
-                    console.warn("Unexpected data format received, using fallback data");
-                    // Fallback Destiny-themed data
-                    tableData = [
-                        { 
-                            "itemName": "Gjallarhorn", 
-                            "powerLevel": 1350, 
-                            "popularity": 1000000,
-                            ...(startDate ? { "startDate": startDate } : {}),
-                            ...(endDate ? { "endDate": endDate } : {})
-                        },
-                        { 
-                            "itemName": "Thorn", 
-                            "powerLevel": 1345, 
-                            "popularity": 750000,
-                            ...(startDate ? { "startDate": startDate } : {}),
-                            ...(endDate ? { "endDate": endDate } : {})
-                        },
-                        { 
-                            "itemName": "Ace of Spades", 
-                            "powerLevel": 1340, 
-                            "popularity": 500000,
-                            ...(startDate ? { "startDate": startDate } : {}),
-                            ...(endDate ? { "endDate": endDate } : {})
+                        // Handle data type conversions
+                        switch(column.dataType) {
+                            case tableau.dataTypeEnum.bool:
+                                row[column.id] = Boolean(value);
+                                break;
+                            case tableau.dataTypeEnum.int:
+                                row[column.id] = value === null || value === undefined ? 0 : parseInt(value);
+                                break;
+                            case tableau.dataTypeEnum.string:
+                                row[column.id] = value === null || value === undefined ? "" : String(value);
+                                break;
+                            default:
+                                row[column.id] = value;
                         }
-                    ];
+                    });
+                    tableData.push(row);
                 }
-                
-                console.log("Adding " + tableData.length + " rows to Tableau table");
+
+                console.log("Processed records:", tableData.length);
                 table.appendRows(tableData);
-                console.log("Data load complete, calling doneCallback()");
                 doneCallback();
             },
             error: function(xhr, status, error) {
-                console.error("Guardian down! Error fetching Destiny 2 data: " + error);
-                
-                // Check for Bungie-specific error responses
-                var errorMessage = "Error fetching data: " + error;
+                console.error("Error fetching data:", error);
+                var errorMessage = "Error fetching data from " + endpoint + ": " + error;
                 
                 try {
                     if (xhr.responseJSON) {
@@ -185,7 +363,6 @@
                     console.error("Error parsing error response:", e);
                 }
                 
-                console.error(errorMessage);
                 tableau.abortWithError(errorMessage);
             }
         });
@@ -193,101 +370,69 @@
 
     // Init function for when the page loads
     myConnector.init = function(initCallback) {
-        tableau.authType = tableau.authTypeEnum.basic;
+        console.log("Initializing connector...");
+        tableau.authType = tableau.authTypeEnum.custom;
         
-        console.log("Initializing connector in phase: " + tableau.phase);
-        
-        // Handle initialization based on the phase
-        if (tableau.phase == tableau.phaseEnum.interactivePhase || tableau.phase == tableau.phaseEnum.authPhase) {
-            console.log("In interactive/auth phase, setting up UI handlers");
-            
-            // Add event listeners for the submit button
-            $(document).ready(function() {
-                $("#submitButton").click(function() {
-                    console.log("Connect button clicked");
-                    
-                    // Get the input values
-                    var apiKey = $("#apiKey").val().trim();
-                    var startDate = $("#startDate").val().trim();
-                    var endDate = $("#endDate").val().trim();
-                    
-                    // Validate inputs - only API key is required
-                    if (!apiKey) {
-                        console.warn("Missing required API key");
-                        alert("Guardian, please enter Bungie API Key");
-                        return;
-                    }
-                    
-                    // Dates are optional now
-                    
-                    // Enhanced date validation - only if dates are provided
-                    try {
-                        // Validate start date if provided
-                        if (startDate) {
-                            var start = new Date(startDate);
-                            if (isNaN(start.getTime())) {
-                                throw new Error("Invalid start date format");
-                            }
-                            startDate = start.toISOString().split('T')[0];
-                        }
-                        
-                        // Validate end date if provided
-                        if (endDate) {
-                            var end = new Date(endDate);
-                            if (isNaN(end.getTime())) {
-                                throw new Error("Invalid end date format");
-                            }
-                            endDate = end.toISOString().split('T')[0];
-                        }
-                        
-                        // Validate date range if both dates are provided
-                        if (startDate && endDate) {
-                            if (new Date(endDate) < new Date(startDate)) {
-                                console.warn("Invalid date range");
-                                alert("End date must be after start date");
-                                return;
-                            }
-                        }
-                    } catch (e) {
-                        console.error("Date validation error:", e);
-                        alert("Please enter valid dates in YYYY-MM-DD format");
-                        return;
-                    }
-                    
-                    console.log("Storing connection information");
-                    
-                    // Store the API key as the password for security
-                    tableau.username = "destiny_guardian";
-                    tableau.password = apiKey;
-                    
-                    // Store the dates in connectionData (if provided)
-                    var connectionData = {};
-                    if (startDate) {
-                        connectionData.startDate = startDate;
-                    }
-                    if (endDate) {
-                        connectionData.endDate = endDate;
-                    }
-                    tableau.connectionData = JSON.stringify(connectionData);
-                    
-                    console.log("Connection data set:", connectionData);
-                    
-                    // Show loading indicator
-                    $("#loadingIndicator").show();
-                    console.log("Submitting connection to Tableau");
-                    
-                    // Submit the connector
-                    tableau.connectionName = "Destiny 2 Guardian Data";
-                    tableau.submit();
-                });
-                
-                console.log("UI handlers initialized");
-            });
-        } else {
-            console.log("In data gathering phase or other non-interactive phase");
+        // If we have a stored API key, save it in the password field
+        if (tableau.phase === tableau.phaseEnum.authPhase) {
+            console.log("Auth phase - checking for API key");
+            var connectionData = JSON.parse(tableau.connectionData || '{}');
+            if (connectionData.apiKey) {
+                tableau.password = connectionData.apiKey;
+                console.log("Stored API key in tableau.password");
+            }
         }
         
-        console.log("Calling initCallback()");
+        // Set up basic button handlers
+        if (tableau.phase === tableau.phaseEnum.interactivePhase || 
+            tableau.phase === tableau.phaseEnum.authPhase) {
+            
+            // Select All
+            document.getElementById('selectAllBtn').onclick = function() {
+                document.querySelectorAll('input[name="tables"]')
+                    .forEach(function(checkbox) { checkbox.checked = true; });
+            };
+            
+            // Deselect All
+            document.getElementById('deselectAllBtn').onclick = function() {
+                document.querySelectorAll('input[name="tables"]')
+                    .forEach(function(checkbox) { checkbox.checked = false; });
+            };
+            
+            // Submit
+            document.getElementById('submitButton').onclick = function() {
+                var apiKey = document.getElementById('apiKey').value.trim();
+                var dataDate = document.getElementById('dataDate').value.trim();
+                var selectedTables = [];
+                
+                document.querySelectorAll('input[name="tables"]:checked')
+                    .forEach(function(checkbox) {
+                        selectedTables.push(checkbox.value);
+                    });
+                
+                if (!apiKey) {
+                    alert("Please enter your API Key");
+                    return;
+                }
+                
+                if (selectedTables.length === 0) {
+                    alert("Please select at least one table");
+                    return;
+                }
+                
+                // Store API key in both connectionData and password
+                tableau.connectionData = JSON.stringify({
+                    apiKey: apiKey,
+                    dataDate: dataDate,
+                    tables: selectedTables
+                });
+                tableau.password = apiKey;
+                
+                tableau.connectionName = "Destiny 2 Manifest Data";
+                tableau.submit();
+            };
+        }
+        
         initCallback();
     };
 
@@ -302,6 +447,6 @@
     tableau.registerConnector(myConnector);
     
     // Log connector registration
-    console.log("Destiny 2 connector registered with Tableau");
+    console.log("Connector registered");
+    
 })();
-
