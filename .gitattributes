@@ -1,1 +1,0 @@
-inventory_items.csv filter=lfs diff=lfs merge=lfs -text
