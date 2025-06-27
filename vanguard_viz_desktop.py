@@ -305,13 +305,24 @@ class VanguardVizDesktop:
     # Async wrapper methods
     def test_connection_async(self):
         """Test API connection in a separate thread"""
+        if not self.api_key.get():
+            messagebox.showerror("Error", "Please enter your API key first.")
+            return
+            
         def run_test():
             self.update_status("Testing API connection...")
             try:
-                # This is a simplified sync version - in real implementation, 
-                # you'd need to handle the async properly
-                self.update_status("API connection test completed (check console for details)")
-                messagebox.showinfo("API Test", "Check the console output for connection test results.")
+                result = test_api_connection(self.api_key.get())
+                if result["status"] == "connected":
+                    self.update_status(f"Connected! Manifest version: {result['version']}")
+                    messagebox.showinfo("API Test Success", 
+                                      f"✅ Successfully connected to Bungie API!\n\n"
+                                      f"Manifest Version: {result['version']}\n"
+                                      f"Message: {result['message']}")
+                else:
+                    self.update_status(f"Connection failed: {result['message']}")
+                    messagebox.showerror("API Test Failed", 
+                                       f"❌ Connection failed:\n\n{result['message']}")
             except Exception as e:
                 self.update_status(f"API test failed: {e}")
                 messagebox.showerror("API Test Failed", f"Error: {e}")
@@ -331,9 +342,16 @@ class VanguardVizDesktop:
         def run_load():
             self.update_status("Loading user profile...")
             try:
-                # Note: This would need proper async handling in real implementation
-                self.update_status("Profile loaded successfully")
-                self.refresh_data_display()
+                result = get_user_profile(self.bungie_name.get(), self.bungie_code.get(), self.api_key.get())
+                if "error" in result:
+                    self.update_status(f"Profile load failed: {result['error']}")
+                    messagebox.showerror("Profile Load Failed", result['error'])
+                else:
+                    self.user_profile = result
+                    self.update_status("Profile loaded successfully")
+                    messagebox.showinfo("Profile Loaded", 
+                                      f"✅ Profile loaded for {self.bungie_name.get()}#{self.bungie_code.get()}")
+                    self.refresh_data_display()
             except Exception as e:
                 self.update_status(f"Profile load failed: {e}")
                 messagebox.showerror("Profile Load Failed", f"Error: {e}")
@@ -403,25 +421,39 @@ class VanguardVizDesktop:
         search_term = self.search_var.get().strip()
         if not search_term:
             return
+            
+        if not self.api_key.get():
+            messagebox.showerror("Error", "Please enter your API key first.")
+            return
         
-        try:
-            # Clear previous results
-            for item in self.manifest_tree.get_children():
-                self.manifest_tree.delete(item)
-            
-            # This would use your search_items_by_name function
-            self.update_status(f"Searching for '{search_term}'...")
-            # results = search_items_by_name(conn, search_term)
-            # for result in results:
-            #     self.manifest_tree.insert("", tk.END, values=(
-            #         result["hash"], result["name"], result["itemType"], result["tierType"]
-            #     ))
-            
-            self.update_status(f"Search completed for '{search_term}'")
-            
-        except Exception as e:
-            self.update_status(f"Search failed: {e}")
-            messagebox.showerror("Search Failed", f"Error: {e}")
+        def run_search():
+            try:
+                self.update_status(f"Searching for '{search_term}'...")
+                results = search_items_by_name(search_term, self.api_key.get())
+                
+                # Use root.after to safely update UI from background thread
+                def update_ui():
+                    # Clear previous results
+                    for item in self.manifest_tree.get_children():
+                        self.manifest_tree.delete(item)
+                    
+                    for result in results:
+                        self.manifest_tree.insert("", tk.END, values=(
+                            result["hash"], result["name"], result["type"], result["tier_type"]
+                        ))
+                    
+                    self.update_status(f"Found {len(results)} items matching '{search_term}'")
+                
+                self.root.after(0, update_ui)
+                
+            except Exception as e:
+                def show_error():
+                    self.update_status(f"Search failed: {e}")
+                    messagebox.showerror("Search Failed", f"Error: {e}")
+                
+                self.root.after(0, show_error)
+        
+        threading.Thread(target=run_search, daemon=True).start()
     
     def generate_weapon_report(self):
         """Generate a weapon usage report"""
