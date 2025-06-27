@@ -1,0 +1,6 @@
+# Core dependencies for Vanguard Viz Desktop
+requests>=2.31.0
+python-dotenv>=1.0.0
+
+# For building executable
+pyinstaller>=6.0.0

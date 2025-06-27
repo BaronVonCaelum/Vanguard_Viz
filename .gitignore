@@ -4,6 +4,73 @@ __pycache__/
 *$py.class
 *.so
 .Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Environment variables
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Manifest cache
+manifest_cache/
+
+# Application data
+vanguard_viz_settings.json
+destiny_manifest.db
+
+# Release builds
+release/
+*.zip
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Backup files
+*.bak
+*.orig
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
 venv/
 env/
 ENV/
